@@ -14,6 +14,11 @@ const channels = Object.freeze({
   alwaysOnTop: 'window:always-on-top',
   loginItem: 'system:login-item',
   simulationMode: 'system:simulation-mode',
+  displayLayout: 'display:layout',
+  displayPreview: 'display:preview',
+  displayConfirm: 'display:confirm',
+  displayRevert: 'display:revert',
+  displayIdentify: 'display:identify',
 });
 
 contextBridge.exposeInMainWorld('xrealHub', {
@@ -29,6 +34,11 @@ contextBridge.exposeInMainWorld('xrealHub', {
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke(channels.alwaysOnTop, enabled),
   setLaunchAtLogin: (enabled) => ipcRenderer.invoke(channels.loginItem, enabled),
   setSimulationMode: (enabled) => ipcRenderer.invoke(channels.simulationMode, enabled),
+  getDisplayLayout: () => ipcRenderer.invoke(channels.displayLayout),
+  previewDisplayLayout: (displays) => ipcRenderer.invoke(channels.displayPreview, displays),
+  confirmDisplayLayout: () => ipcRenderer.invoke(channels.displayConfirm),
+  revertDisplayLayout: () => ipcRenderer.invoke(channels.displayRevert),
+  identifyDisplays: () => ipcRenderer.invoke(channels.displayIdentify),
   onSystemSnapshot: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on(channels.snapshotChanged, listener);

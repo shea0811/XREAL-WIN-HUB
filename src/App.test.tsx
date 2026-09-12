@@ -75,6 +75,7 @@ describe('application shell', () => {
     await renderApp();
     const modules = [
       ['XREAL device', 'XREAL device centre'],
+      ['Display Layout Studio', 'Desktop coordinate space'],
       ['Entertainment', 'What do you want to watch?'],
       ['Notes & study', 'Local notebook'],
       ['Workspaces', 'One-click setups'],
@@ -105,6 +106,29 @@ describe('application shell', () => {
 
     await click(buttonContaining('Disconnect simulator'));
     expect(container.textContent).toContain('Not detected');
+  });
+
+  it('opens Layout Studio with a simulated One Pro and previews a safe arrangement', async () => {
+    await renderApp();
+    await click(buttonContaining('XREAL device'));
+    await click(buttonContaining('Simulate One Pro'));
+    await click(buttonContaining('Display Layout Studio'));
+
+    expect(container.textContent).toContain('XREAL One Pro (simulated)');
+    expect(container.textContent).toContain('XREAL FOV');
+    expect(container.textContent).toContain('Safe preview mode');
+
+    const xInput = container.querySelector<HTMLInputElement>('[aria-label="X position"]');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(xInput, '-1920');
+      xInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await click(buttonContaining('Preview'));
+    expect(container.textContent).toContain('Can you see every display?');
+    await click(buttonContaining('Keep changes'));
+    expect(container.textContent).not.toContain('Can you see every display?');
   });
 
   it('runs gesture actions and creates a local quick note', async () => {

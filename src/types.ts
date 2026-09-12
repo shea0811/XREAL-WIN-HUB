@@ -1,6 +1,7 @@
 export type HubSection =
   | 'home'
   | 'device'
+  | 'display-studio'
   | 'entertainment'
   | 'notes'
   | 'workspaces'
@@ -131,6 +132,36 @@ export interface DisplayInfo {
   rotation: number;
 }
 
+export interface DisplayLayoutItem {
+  id: string;
+  deviceName: string;
+  label: string;
+  primary: boolean;
+  internal: boolean;
+  xreal: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  scaleFactor: number;
+}
+
+export interface DisplayLayoutSnapshot {
+  source: 'windows-native' | 'electron-fallback' | 'simulation' | 'browser-preview';
+  canApply: boolean;
+  capturedAt: string;
+  displays: DisplayLayoutItem[];
+  warning?: string;
+}
+
+export interface DisplayLayoutResult {
+  success: boolean;
+  requiresConfirmation: boolean;
+  message: string;
+  layout: DisplayLayoutSnapshot;
+}
+
 export interface SystemSnapshot {
   appVersion: string;
   platform: string;
@@ -176,6 +207,11 @@ export interface XrealHubBridge {
   setAlwaysOnTop(enabled: boolean): Promise<boolean>;
   setLaunchAtLogin(enabled: boolean): Promise<boolean>;
   setSimulationMode(enabled: boolean): Promise<SystemSnapshot>;
+  getDisplayLayout(): Promise<DisplayLayoutSnapshot>;
+  previewDisplayLayout(displays: DisplayLayoutItem[]): Promise<DisplayLayoutResult>;
+  confirmDisplayLayout(): Promise<boolean>;
+  revertDisplayLayout(): Promise<DisplayLayoutSnapshot>;
+  identifyDisplays(): Promise<boolean>;
   onSystemSnapshot(callback: (snapshot: SystemSnapshot) => void): () => void;
 }
 

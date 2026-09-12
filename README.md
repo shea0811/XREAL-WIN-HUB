@@ -8,6 +8,7 @@ A local-first Windows command centre for XREAL displays. It brings display place
 
 - **Home dashboard** — device status, quick launch cards, and a 25-minute focus timer.
 - **XREAL device centre** — Windows display discovery, preferred-display selection, window placement, and theatre mode.
+- **Display Layout Studio** — draggable physical/XREAL topology, screen identification, primary-display selection, edge snapping, guarded Windows apply, and automatic rollback.
 - **One Pro simulator** — deterministic 1920×1080 virtual-device mode for testing connection-dependent flows without hardware.
 - **Entertainment deck** — full-screen setup and secure browser launchers for DRM-compatible playback.
 - **Notes & study** — searchable, autosaved notebooks organised into sections and pages with lightweight tags.
@@ -28,6 +29,7 @@ A local-first Windows command centre for XREAL displays. It brings display place
 | Launch sites and workspace targets | Ready | Validated HTTP(S) URLs in the default browser |
 | Gesture configuration and execution | Ready | Keyboard simulation (`Ctrl+Shift+1` through `6`) |
 | Simulated One Pro connection | Ready | In-app virtual display and connection-event provider |
+| Arrange the Windows desktop | Ready | Native display enumeration, position-only batch apply, 15-second confirmation, and independent 20-second rollback watcher |
 | XREAL Eye/native hand input on Windows | Planned | Provider adapter; no undocumented SDK assumptions |
 | Spatial anchoring and hardware controls | Planned | Requires a supported native integration path |
 
@@ -64,7 +66,7 @@ npm run package:win
 The Windows installer is emitted to `release/`. The build is unsigned until a Windows code-signing certificate is configured.
 
 The automated suite covers application startup rendering, all primary modules,
-One Pro simulation, display events, notes, gesture actions, external launchers,
+One Pro simulation, display topology validation and previews, display events, notes, gesture actions, external launchers,
 appearance settings, persistence boundaries, and unsafe-URL rejection.
 
 ## Security and privacy

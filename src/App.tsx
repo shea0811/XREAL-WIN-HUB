@@ -11,6 +11,7 @@ import {
 } from './lib/gesture-engine';
 import { Dashboard } from './modules/Dashboard';
 import { DeviceCenter } from './modules/DeviceCenter';
+import { DisplayStudio } from './modules/DisplayStudio';
 import { Entertainment } from './modules/Entertainment';
 import { Gestures } from './modules/Gestures';
 import { Notes } from './modules/Notes';
@@ -44,7 +45,9 @@ export default function App() {
     markNotificationsRead,
     clearNotifications,
   } = useHub();
-  const [activeSection, setActiveSection] = useState<HubSection>('home');
+  const [activeSection, setActiveSection] = useState<HubSection>(() =>
+    window.location.hash === '#display-studio' ? 'display-studio' : 'home',
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<SystemSnapshot | null>(null);
@@ -278,6 +281,8 @@ export default function App() {
             onToggleSimulation={(enabled) => void toggleSimulation(enabled)}
           />
         );
+      case 'display-studio':
+        return <DisplayStudio snapshot={snapshot} onToast={showToast} />;
       case 'entertainment':
         return <Entertainment snapshot={snapshot} onToast={showToast} />;
       case 'notes':

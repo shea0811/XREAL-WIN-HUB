@@ -40,4 +40,25 @@ describe('browser platform bridge', () => {
     await expect(platform.openExternal('javascript:alert(1)')).resolves.toBe(false);
     await expect(platform.moveToDisplay('missing-display')).resolves.toBe(false);
   });
+
+  it('previews, confirms, and restores simulated display layouts', async () => {
+    await platform.setSimulationMode(true);
+    const original = await platform.getDisplayLayout();
+    expect(original.source).toBe('simulation');
+    expect(original.canApply).toBe(true);
+
+    const proposed = original.displays.map((display) =>
+      display.xreal ? { ...display, x: -1920, y: 120 } : display,
+    );
+    const preview = await platform.previewDisplayLayout(proposed);
+    expect(preview.requiresConfirmation).toBe(true);
+    expect(preview.layout.displays.find((display) => display.xreal)).toMatchObject({ x: -1920, y: 120 });
+
+    const restored = await platform.revertDisplayLayout();
+    expect(restored.displays.find((display) => display.xreal)?.x).toBeGreaterThanOrEqual(1280);
+
+    await platform.previewDisplayLayout(proposed);
+    await expect(platform.confirmDisplayLayout()).resolves.toBe(true);
+    expect((await platform.getDisplayLayout()).displays.find((display) => display.xreal)?.x).toBe(-1920);
+  });
 });

@@ -1,6 +1,9 @@
 import { createDefaultState, normaliseState } from '../data/defaults';
+import { validateDisplayLayout } from '../lib/display-layout';
 import { validWebUrl } from '../lib/format';
 import type {
+  DisplayLayoutItem,
+  DisplayLayoutSnapshot,
   HubState,
   SystemSnapshot,
   WorkspaceLaunchResult,
@@ -11,9 +14,13 @@ import type {
 const STORAGE_KEY = 'xreal-win-hub:state';
 const SIMULATED_DISPLAY_ID = 'xreal-one-pro-simulated';
 let browserSimulationEnabled = false;
+let browserLayoutOverride: DisplayLayoutItem[] | null = null;
+let browserPendingLayout: DisplayLayoutItem[] | null = null;
 const browserSnapshotListeners = new Set<(snapshot: SystemSnapshot) => void>();
 
 function browserSnapshot(): SystemSnapshot {
+  const screenWidth = Math.max(1280, window.screen.width);
+  const screenHeight = Math.max(720, window.screen.height);
   const primaryDisplay = {
     id: 'browser-primary',
     label: 'Browser preview display',
@@ -21,16 +28,16 @@ function browserSnapshot(): SystemSnapshot {
     bounds: {
       x: 0,
       y: 0,
-      width: window.screen.width,
-      height: window.screen.height,
+      width: screenWidth,
+      height: screenHeight,
     },
     workArea: {
       x: 0,
       y: 0,
-      width: window.screen.availWidth,
-      height: window.screen.availHeight,
+      width: Math.max(1280, window.screen.availWidth),
+      height: Math.max(680, window.screen.availHeight),
     },
-    size: { width: window.screen.width, height: window.screen.height },
+    size: { width: screenWidth, height: screenHeight },
     scaleFactor: window.devicePixelRatio,
     rotation: 0,
   };
@@ -40,8 +47,8 @@ function browserSnapshot(): SystemSnapshot {
     label: 'XREAL One Pro (simulated)',
     primary: false,
     size: { width: 1920, height: 1080 },
-    bounds: { x: window.screen.width, y: 0, width: 1920, height: 1080 },
-    workArea: { x: window.screen.width, y: 0, width: 1920, height: 1040 },
+    bounds: { x: screenWidth, y: 0, width: 1920, height: 1080 },
+    workArea: { x: screenWidth, y: 0, width: 1920, height: 1040 },
     scaleFactor: 1,
   };
   return {
@@ -67,6 +74,35 @@ function browserSnapshot(): SystemSnapshot {
       },
     },
     privacy: { telemetry: false, localStorage: true },
+  };
+}
+
+function browserDisplayLayout(): DisplayLayoutSnapshot {
+  const snapshot = browserSnapshot();
+  const displays = snapshot.displays.map((display, index) => ({
+    id: display.id,
+    deviceName: display.id,
+    label: display.label || `Display ${index + 1}`,
+    primary: display.primary,
+    internal: index === 0,
+    xreal: display.id === snapshot.xreal.displayId,
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: Math.max(1280, display.size.width),
+    height: Math.max(720, display.size.height),
+    rotation: display.rotation,
+    scaleFactor: display.scaleFactor,
+  }));
+  return {
+    source: browserSimulationEnabled ? 'simulation' : 'browser-preview',
+    canApply: true,
+    capturedAt: new Date().toISOString(),
+    displays: browserLayoutOverride
+      ? displays.map((display) => browserLayoutOverride?.find((item) => item.id === display.id) ?? display)
+      : displays,
+    warning: browserSimulationEnabled
+      ? 'Simulator mode: layout changes are visual only and do not alter Windows.'
+      : 'Browser preview: test the editor here, then use the Windows app to change real displays.',
   };
 }
 
@@ -120,9 +156,43 @@ const browserBridge: XrealHubBridge = {
   },
   async setSimulationMode(enabled: boolean) {
     browserSimulationEnabled = enabled;
+    browserLayoutOverride = null;
+    browserPendingLayout = null;
     const snapshot = browserSnapshot();
     browserSnapshotListeners.forEach((listener) => listener(snapshot));
     return snapshot;
+  },
+  async getDisplayLayout() {
+    return browserDisplayLayout();
+  },
+  async previewDisplayLayout(displays: DisplayLayoutItem[]) {
+    const error = validateDisplayLayout(displays);
+    if (error) throw new Error(error);
+    const current = browserDisplayLayout();
+    if (displays.length !== current.displays.length) throw new Error('The connected display list changed.');
+    browserPendingLayout = current.displays.map((display) => ({ ...display }));
+    browserLayoutOverride = displays.map((display) => ({ ...display }));
+    return {
+      success: true,
+      requiresConfirmation: true,
+      message: browserSimulationEnabled
+        ? 'Simulated layout preview is active.'
+        : 'Browser layout preview is active.',
+      layout: browserDisplayLayout(),
+    };
+  },
+  async confirmDisplayLayout() {
+    if (!browserPendingLayout) return false;
+    browserPendingLayout = null;
+    return true;
+  },
+  async revertDisplayLayout() {
+    if (browserPendingLayout) browserLayoutOverride = browserPendingLayout;
+    browserPendingLayout = null;
+    return browserDisplayLayout();
+  },
+  async identifyDisplays() {
+    return true;
   },
   onSystemSnapshot(callback) {
     browserSnapshotListeners.add(callback);

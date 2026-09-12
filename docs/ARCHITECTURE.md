@@ -8,6 +8,7 @@ flowchart TD
     UI --> Bridge["Typed preload bridge"]
     Bridge --> Main["Electron main process"]
     Main --> Windows["Windows display and shell APIs"]
+    Main --> Guard["Independent rollback watcher"]
     Main --> Disk["Atomic local JSON"]
 ```
 
@@ -23,13 +24,19 @@ flowchart TD
 
 ### Main process
 
-`electron/main.cjs` owns display discovery, window movement, full-screen state, startup registration, secure external launching, and local persistence. All URLs and display IDs are validated again here because renderer data is untrusted at a process boundary.
+`electron/main.cjs` owns display discovery, guarded topology changes, window movement, full-screen state, startup registration, secure external launching, and local persistence. All URLs, display identities, positions, and immutable modes are validated again here because renderer data is untrusted at a process boundary.
+
+### Display Layout Studio
+
+The renderer edits a draft containing positions and primary-display state. Resolution, scale, and rotation are read-only. Before applying, the main process re-enumerates attached Windows devices and rejects missing, duplicated, resized, non-integer, or out-of-range entries.
+
+On Windows, `electron/windows-display.ps1` uses `EnumDisplayDevices`, `EnumDisplaySettings`, and `ChangeDisplaySettingsEx` to test and stage every position before a single batch apply. A detached watcher holds the original topology and restores it after 20 seconds unless the user confirms through the 15-second in-app prompt. The five-second margin allows rollback even if the renderer or main process exits during confirmation.
 
 ## Persistence
 
-The state schema is versioned with `schemaVersion: 1`. Electron stores `hub-state.json` beneath `app.getPath('userData')`; a temporary file is written and renamed to avoid partially written state. Browser previews use `localStorage` only as a development fallback.
+The state schema is versioned with `schemaVersion: 2` and migrates v0.1 data. Electron stores `hub-state.json` beneath `app.getPath('userData')`; a temporary file is written and renamed to avoid partially written state. Browser previews use `localStorage` only as a development fallback.
 
-Persisted data includes notes, workspace profiles, gesture mappings, preferences, and the 30 most recent activity items. It excludes secrets, ChatGPT content, credentials, camera data, and telemetry.
+Persisted data includes notebooks, sections, notes, notifications, workspace profiles, gesture mappings, preferences, and recent activity. It excludes secrets, ChatGPT content, credentials, camera data, and telemetry.
 
 ## Design decisions
 

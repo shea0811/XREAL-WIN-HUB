@@ -1,8 +1,12 @@
 'use strict';
 
 const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require('electron');
+const { execFile, spawn } = require('node:child_process');
 const { promises: fs } = require('node:fs');
 const path = require('node:path');
+const { promisify } = require('node:util');
+
+const execFileAsync = promisify(execFile);
 
 const STATE_FILE = 'hub-state.json';
 const MAX_STATE_BYTES = 2 * 1024 * 1024;
@@ -20,6 +24,11 @@ const channels = Object.freeze({
   alwaysOnTop: 'window:always-on-top',
   loginItem: 'system:login-item',
   simulationMode: 'system:simulation-mode',
+  displayLayout: 'display:layout',
+  displayPreview: 'display:preview',
+  displayConfirm: 'display:confirm',
+  displayRevert: 'display:revert',
+  displayIdentify: 'display:identify',
 });
 
 const SIMULATED_DISPLAY_ID = 'xreal-one-pro-simulated';
@@ -27,6 +36,8 @@ const SIMULATED_DISPLAY_ID = 'xreal-one-pro-simulated';
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 let simulationEnabled = false;
+let simulatedLayoutOverride = null;
+let pendingDisplayTransaction = null;
 
 function statePath() {
   return path.join(app.getPath('userData'), STATE_FILE);
@@ -67,8 +78,18 @@ function getSnapshot() {
         id: SIMULATED_DISPLAY_ID,
         label: 'XREAL One Pro (simulated)',
         primary: false,
-        bounds: { ...screen.getPrimaryDisplay().bounds },
-        workArea: { ...screen.getPrimaryDisplay().workArea },
+        bounds: {
+          x: screen.getPrimaryDisplay().bounds.x + screen.getPrimaryDisplay().bounds.width,
+          y: screen.getPrimaryDisplay().bounds.y,
+          width: 1920,
+          height: 1080,
+        },
+        workArea: {
+          x: screen.getPrimaryDisplay().bounds.x + screen.getPrimaryDisplay().bounds.width,
+          y: screen.getPrimaryDisplay().bounds.y,
+          width: 1920,
+          height: 1040,
+        },
         size: { width: 1920, height: 1080 },
         scaleFactor: 1,
         rotation: 0,
@@ -102,6 +123,236 @@ function getSnapshot() {
       localStorage: true,
     },
   };
+}
+
+function electronDisplayLayout() {
+  const snapshot = getSnapshot();
+  const items = snapshot.displays.map((display, index) => ({
+    id: display.id,
+    deviceName: display.id,
+    label: display.label || `Display ${index + 1}`,
+    primary: display.primary,
+    internal: false,
+    xreal: display.id === snapshot.xreal.displayId || /xreal|nreal|air 2|one pro/i.test(display.label),
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.size.width,
+    height: display.size.height,
+    rotation: display.rotation,
+    scaleFactor: display.scaleFactor,
+  }));
+  const displays = simulatedLayoutOverride
+    ? items.map((item) => simulatedLayoutOverride.find((saved) => saved.id === item.id) ?? item)
+    : items;
+  return {
+    source: simulationEnabled ? 'simulation' : 'electron-fallback',
+    canApply: simulationEnabled,
+    capturedAt: new Date().toISOString(),
+    displays,
+    warning: simulationEnabled
+      ? 'Simulator mode: layout changes are visual only and do not alter Windows.'
+      : 'Windows display controls are unavailable. Run the installed Windows app to apply layouts.',
+  };
+}
+
+function displayHelperPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'windows-display.ps1');
+  }
+  return path.join(__dirname, 'windows-display.ps1');
+}
+
+async function runDisplayHelper(action, payloadPath) {
+  const args = [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', displayHelperPath(), '-Action', action,
+  ];
+  if (payloadPath) args.push('-PayloadPath', payloadPath);
+  const { stdout } = await execFileAsync('powershell.exe', args, {
+    windowsHide: true,
+    timeout: 15_000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  return JSON.parse(stdout.trim());
+}
+
+function mergeNativeDisplayDetails(nativeDisplays) {
+  const electronDisplays = screen.getAllDisplays();
+  return nativeDisplays.map((display, index) => {
+    const match = electronDisplays.find((candidate) =>
+      candidate.bounds.x === display.x
+      && candidate.bounds.y === display.y
+      && candidate.size.width === display.width
+      && candidate.size.height === display.height,
+    );
+    const label = match?.label?.trim() || display.label || `Display ${index + 1}`;
+    return {
+      ...display,
+      id: display.deviceName,
+      label,
+      internal: Boolean(match?.internal),
+      xreal: /xreal|nreal|air 2|one pro/i.test(label),
+      scaleFactor: match?.scaleFactor ?? 1,
+    };
+  });
+}
+
+async function getDisplayLayout() {
+  if (simulationEnabled || process.platform !== 'win32') return electronDisplayLayout();
+  try {
+    const result = await runDisplayHelper('Get');
+    return {
+      source: 'windows-native',
+      canApply: true,
+      capturedAt: new Date().toISOString(),
+      displays: mergeNativeDisplayDetails(result.displays ?? []),
+    };
+  } catch (error) {
+    console.error('Unable to read Windows display layout', error);
+    return electronDisplayLayout();
+  }
+}
+
+function assertProposedLayout(proposed, current) {
+  if (!Array.isArray(proposed) || proposed.length < 1 || proposed.length > 16) {
+    throw new TypeError('The layout must contain between 1 and 16 connected displays.');
+  }
+  if (proposed.filter((display) => display?.primary === true).length !== 1) {
+    throw new TypeError('Exactly one display must be primary.');
+  }
+  const currentByName = new Map(current.map((display) => [display.deviceName, display]));
+  if (new Set(proposed.map((display) => display?.deviceName)).size !== proposed.length) {
+    throw new TypeError('The display list contains duplicate devices.');
+  }
+  for (const display of proposed) {
+    const existing = currentByName.get(display?.deviceName);
+    if (!existing) throw new TypeError('A display was disconnected before the layout could be applied.');
+    if (!Number.isInteger(display.x) || !Number.isInteger(display.y)) {
+      throw new TypeError('Display positions must use whole pixels.');
+    }
+    if (Math.abs(display.x) > 32_000 || Math.abs(display.y) > 32_000) {
+      throw new RangeError('A display position is outside the supported desktop range.');
+    }
+    if (display.width !== existing.width || display.height !== existing.height) {
+      throw new TypeError('Resolution changes are not supported by Layout Studio.');
+    }
+    if (display.primary && (display.x !== 0 || display.y !== 0)) {
+      throw new TypeError('The primary display must be positioned at 0,0.');
+    }
+  }
+}
+
+async function stopRollbackWatch(transaction) {
+  if (!transaction?.confirmToken) return;
+  await fs.writeFile(transaction.confirmToken, 'confirmed', { encoding: 'utf8', mode: 0o600 });
+}
+
+async function previewDisplayLayout(proposed) {
+  const current = await getDisplayLayout();
+  assertProposedLayout(proposed, current.displays);
+  if (!current.canApply) throw new Error(current.warning || 'Display layout changes are unavailable.');
+  if (pendingDisplayTransaction) await revertDisplayLayout();
+
+  if (current.source === 'simulation') {
+    pendingDisplayTransaction = { kind: 'simulation', original: current.displays };
+    simulatedLayoutOverride = proposed.map((display) => ({ ...display }));
+    return {
+      success: true,
+      requiresConfirmation: true,
+      message: 'Simulated layout preview is active.',
+      layout: await getDisplayLayout(),
+    };
+  }
+
+  const transactionDir = path.join(app.getPath('temp'), `xreal-layout-${process.pid}-${Date.now()}`);
+  const originalPath = path.join(transactionDir, 'original.json');
+  const proposedPath = path.join(transactionDir, 'proposed.json');
+  const confirmToken = path.join(transactionDir, 'confirmed.token');
+  await fs.mkdir(transactionDir, { recursive: true });
+  await Promise.all([
+    fs.writeFile(originalPath, JSON.stringify(current.displays), { encoding: 'utf8', mode: 0o600 }),
+    fs.writeFile(proposedPath, JSON.stringify(proposed), { encoding: 'utf8', mode: 0o600 }),
+  ]);
+
+  const watcher = spawn('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', displayHelperPath(), '-Action', 'Watch', '-PayloadPath', originalPath,
+    '-ConfirmToken', confirmToken, '-Seconds', '20',
+  ], { detached: true, stdio: 'ignore', windowsHide: true });
+  watcher.unref();
+  const transaction = { kind: 'windows', originalPath, proposedPath, confirmToken };
+  try {
+    await runDisplayHelper('Apply', proposedPath);
+    pendingDisplayTransaction = transaction;
+  } catch (error) {
+    await stopRollbackWatch(transaction).catch(() => undefined);
+    throw error;
+  }
+  return {
+    success: true,
+    requiresConfirmation: true,
+    message: 'Windows is previewing the new display arrangement.',
+    layout: await getDisplayLayout(),
+  };
+}
+
+async function confirmDisplayLayout() {
+  if (!pendingDisplayTransaction) return false;
+  if (pendingDisplayTransaction.kind === 'windows') await stopRollbackWatch(pendingDisplayTransaction);
+  pendingDisplayTransaction = null;
+  return true;
+}
+
+async function revertDisplayLayout() {
+  const transaction = pendingDisplayTransaction;
+  if (!transaction) return getDisplayLayout();
+  if (transaction.kind === 'simulation') {
+    simulatedLayoutOverride = transaction.original.map((display) => ({ ...display }));
+  } else {
+    try {
+      await runDisplayHelper('Apply', transaction.originalPath);
+    } finally {
+      await stopRollbackWatch(transaction).catch(() => undefined);
+    }
+  }
+  pendingDisplayTransaction = null;
+  return getDisplayLayout();
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+}
+
+async function identifyDisplays() {
+  const displays = screen.getAllDisplays();
+  const windows = displays.map((display, index) => {
+    const width = 240;
+    const height = 150;
+    const marker = new BrowserWindow({
+      width,
+      height,
+      x: display.bounds.x + Math.round((display.bounds.width - width) / 2),
+      y: display.bounds.y + Math.round((display.bounds.height - height) / 2),
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      focusable: false,
+      show: false,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    marker.setIgnoreMouseEvents(true);
+    const label = escapeHtml(displayLabel(display, index));
+    const html = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent;font-family:Segoe UI,sans-serif;color:white}main{box-sizing:border-box;width:240px;height:150px;display:grid;place-items:center;text-align:center;background:rgba(7,11,18,.93);border:2px solid #5ee5d5;border-radius:18px;box-shadow:0 0 45px rgba(94,229,213,.35)}strong{display:block;font-size:54px;line-height:1}span{display:block;max-width:205px;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:#a9c0ca}</style><main><div><strong>${index + 1}</strong><span>${label}</span></div></main>`;
+    void marker.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).then(() => marker.showInactive());
+    return marker;
+  });
+  setTimeout(() => windows.forEach((window) => {
+    if (!window.isDestroyed()) window.destroy();
+  }), 3000);
+  return windows.length > 0;
 }
 
 function sendSnapshot() {
@@ -212,10 +463,17 @@ function registerIpc() {
   });
   ipcMain.handle(channels.simulationMode, (_event, enabled) => {
     simulationEnabled = Boolean(enabled);
+    simulatedLayoutOverride = null;
+    pendingDisplayTransaction = null;
     const snapshot = getSnapshot();
     sendSnapshot();
     return snapshot;
   });
+  ipcMain.handle(channels.displayLayout, getDisplayLayout);
+  ipcMain.handle(channels.displayPreview, (_event, displays) => previewDisplayLayout(displays));
+  ipcMain.handle(channels.displayConfirm, confirmDisplayLayout);
+  ipcMain.handle(channels.displayRevert, revertDisplayLayout);
+  ipcMain.handle(channels.displayIdentify, identifyDisplays);
 }
 
 async function createWindow() {

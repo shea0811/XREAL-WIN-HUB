@@ -6,6 +6,7 @@ import {
   House,
   NotebookPen,
   PanelsTopLeft,
+  MonitorCog,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -33,6 +34,13 @@ export const NAVIGATION: NavigationItem[] = [
     shortLabel: 'Device',
     description: 'Display connection and capabilities',
     icon: Glasses,
+  },
+  {
+    id: 'display-studio',
+    label: 'Display Layout Studio',
+    shortLabel: 'Displays',
+    description: 'Arrange physical and XREAL screens',
+    icon: MonitorCog,
   },
   {
     id: 'entertainment',
