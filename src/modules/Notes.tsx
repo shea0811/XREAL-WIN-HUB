@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
   BookPlus,
@@ -34,6 +34,8 @@ export function Notes({ onToast }: { onToast(message: string, detail?: string): 
   const [activeSectionId, setActiveSectionId] = useState(
     initialNote?.sectionId ?? state.noteSections[0]?.id ?? '',
   );
+  const [creationType, setCreationType] = useState<'notebook' | 'section' | null>(null);
+  const [creationName, setCreationName] = useState('');
 
   useEffect(() => {
     if (state.noteSections.some((section) => section.id === activeSectionId)) return;
@@ -78,25 +80,36 @@ export function Notes({ onToast }: { onToast(message: string, detail?: string): 
   }
 
   function addNotebook() {
-    const name = window.prompt('Name this notebook:', 'New notebook');
-    if (!name?.trim()) return;
-    const notebook = createNotebook(name);
-    setActiveNotebookId(notebook.id);
-    setActiveSectionId('');
-    setSelectedNoteId(null);
-    recordActivity({ kind: 'note', title: 'Notebook created', detail: notebook.name });
-    onToast('Notebook created', notebook.name);
+    setCreationName('New notebook');
+    setCreationType('notebook');
   }
 
   function addSection() {
     if (!activeNotebookId) return;
-    const name = window.prompt('Name this section:', 'New section');
-    if (!name?.trim()) return;
-    const section = createNoteSection(activeNotebookId, name);
-    setActiveSectionId(section.id);
-    setSelectedNoteId(null);
-    recordActivity({ kind: 'note', title: 'Section created', detail: section.name });
-    onToast('Section created', section.name);
+    setCreationName('New section');
+    setCreationType('section');
+  }
+
+  function submitCreation(event: FormEvent) {
+    event.preventDefault();
+    const name = creationName.trim();
+    if (!name || !creationType) return;
+    if (creationType === 'notebook') {
+      const notebook = createNotebook(name);
+      setActiveNotebookId(notebook.id);
+      setActiveSectionId('');
+      setSelectedNoteId(null);
+      recordActivity({ kind: 'note', title: 'Notebook created', detail: notebook.name });
+      onToast('Notebook created', notebook.name);
+    } else {
+      const section = createNoteSection(activeNotebookId, name);
+      setActiveSectionId(section.id);
+      setSelectedNoteId(null);
+      recordActivity({ kind: 'note', title: 'Section created', detail: section.name });
+      onToast('Section created', section.name);
+    }
+    setCreationType(null);
+    setCreationName('');
   }
 
   function addNote() {
@@ -108,6 +121,7 @@ export function Notes({ onToast }: { onToast(message: string, detail?: string): 
       title: 'New note created',
       detail: 'Saved locally and ready to edit.',
     });
+    onToast('Page created', 'Autosaving locally.');
   }
 
   function removeSelected() {
@@ -232,6 +246,40 @@ export function Notes({ onToast }: { onToast(message: string, detail?: string): 
           )}
         </div>
       </section>
+
+      {creationType ? (
+        <div className="modal-layer" role="presentation" onMouseDown={() => setCreationType(null)}>
+          <form
+            className="dialog-card note-create-dialog"
+            onSubmit={submitCreation}
+            onMouseDown={(event) => event.stopPropagation()}
+            aria-label={`Create ${creationType}`}
+          >
+            <header>
+              <div>
+                <span className="eyebrow">Notes & study</span>
+                <h2>Create {creationType}</h2>
+              </div>
+            </header>
+            <label className="form-field">
+              <span>{creationType === 'notebook' ? 'Notebook name' : 'Section name'}</span>
+              <input
+                autoFocus
+                value={creationName}
+                onChange={(event) => setCreationName(event.target.value)}
+                aria-label={creationType === 'notebook' ? 'Notebook name' : 'Section name'}
+                maxLength={80}
+              />
+            </label>
+            <footer>
+              <Button type="button" variant="ghost" onClick={() => setCreationType(null)}>Cancel</Button>
+              <Button type="submit" variant="primary" disabled={!creationName.trim()}>
+                Create {creationType}
+              </Button>
+            </footer>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

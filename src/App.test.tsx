@@ -154,6 +154,40 @@ describe('application shell', () => {
     expect(container.querySelectorAll('.note-list-item')).toHaveLength(1);
   });
 
+  it('creates a notebook, section, and page using in-app dialogs', async () => {
+    await renderApp();
+    await click(buttonContaining('Notes & study'));
+
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="New notebook"]') ?? undefined);
+    const notebookDialog = container.querySelector('[aria-label="Create notebook"]');
+    expect(notebookDialog).not.toBeNull();
+    const notebookName = notebookDialog?.querySelector<HTMLInputElement>('[aria-label="Notebook name"]');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(notebookName, 'Cybersecurity');
+      notebookName?.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await click(buttonContaining('Create notebook', notebookDialog ?? container));
+    expect(container.textContent).toContain('Cybersecurity');
+
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="New section"]') ?? undefined);
+    const sectionDialog = container.querySelector('[aria-label="Create section"]');
+    const sectionName = sectionDialog?.querySelector<HTMLInputElement>('[aria-label="Section name"]');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(sectionName, 'BRIM');
+      sectionName?.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await click(buttonContaining('Create section', sectionDialog ?? container));
+    expect(container.textContent).toContain('BRIM');
+
+    await click(buttonContaining('New page'));
+    expect(container.textContent).toContain('Untitled note');
+    expect(container.textContent).toContain('Page created');
+  });
+
   it('stores alerts in the notification centre and moves activity into Settings', async () => {
     await renderApp();
     expect(container.textContent).not.toContain('Recent activity');

@@ -12,6 +12,7 @@
 
 - Five-second notification lifecycle, local Notification Centre, and particle-dissolve dismissal. ✅
 - OneNote-style notebook, section, and page organisation with v0.1 data migration. ✅
+- Native in-app notebook and section creation dialogs for packaged Electron builds. ✅
 - Move recent activity from Home to Settings and diagnostics. ✅
 - Add a safe visual editor for connected Windows/XREAL display topology.
 - Add an XREAL-targeted overlay and local Windows media-session listener.
