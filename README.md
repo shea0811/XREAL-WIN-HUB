@@ -10,7 +10,8 @@ A local-first Windows command centre for XREAL displays. It brings display place
 - **XREAL device centre** — Windows display discovery, preferred-display selection, window placement, and theatre mode.
 - **Display Layout Studio** — draggable physical/XREAL topology, screen identification, primary-display selection, edge snapping, guarded Windows apply, and automatic rollback.
 - **One Pro simulator** — deterministic 1920×1080 virtual-device mode for testing connection-dependent flows without hardware.
-- **Entertainment hub** — persistent in-app Spotify and YouTube embeds, saved media links, top-bar transport controls, and secure browser launchers for DRM-only services.
+- **Entertainment hub** — dedicated, persistent Spotify and YouTube pages, saved media links, now-playing artwork, top-bar transport/volume controls, and secure browser launchers for DRM-only services.
+- **Spotify Premium** — optional desktop PKCE sign-in for direct previous/play/next, an exact volume slider, and playback through the Hub; the credential-free embed remains available as a fallback.
 - **Notes & study** — searchable, autosaved notebooks organised into sections and pages with lightweight tags.
 - **Workspaces** — built-in study, cyber lab, entertainment, and service-desk launch profiles plus custom launchers.
 - **Gesture studio** — six configurable mappings with keyboard simulation and a stable adapter boundary for future hardware input.
@@ -30,7 +31,7 @@ A local-first Windows command centre for XREAL displays. It brings display place
 | Gesture configuration and execution | Ready | Keyboard simulation (`Ctrl+Shift+1` through `6`) |
 | Simulated One Pro connection | Ready | In-app virtual display and connection-event provider |
 | Arrange the Windows desktop | Ready | Native display enumeration, position-only batch apply, 15-second confirmation, and independent 20-second rollback watcher |
-| Play Spotify and YouTube in the Hub | Ready | Official credential-free embeds; YouTube has direct transport/volume control and Spotify uses direct play/pause plus allowlisted Windows media keys for skip/volume |
+| Play Spotify and YouTube in the Hub | Ready | Dedicated persistent pages using the official YouTube IFrame API, Spotify embed fallback, and optional Spotify Premium Web Playback SDK integration |
 | XREAL Eye/native hand input on Windows | Planned | Provider adapter; no undocumented SDK assumptions |
 | Spatial anchoring and hardware controls | Planned | Requires a supported native integration path |
 
@@ -57,6 +58,15 @@ Open **XREAL device → Simulate One Pro** to verify display selection, movement
 theatre controls, workspace targeting, and gesture workflows without attaching the glasses.
 Simulation is clearly labelled and never enables native hand-tracking or spatial capabilities.
 
+### Connect Spotify Premium
+
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2. Add `http://127.0.0.1/callback` to its redirect URIs exactly as shown.
+3. In the installed Windows Hub, open **Entertainment → Spotify**, paste the app's Client ID, and choose **Connect Spotify**.
+4. Complete Spotify's browser sign-in. The Hub requests playback-only scopes and stores the resulting token encrypted with Windows secure storage.
+
+Spotify Premium is required for direct Web Playback SDK control. The Client ID is public application configuration, not a client secret; never add a Spotify client secret to the Hub.
+
 ## Verify and package
 
 ```powershell
@@ -74,10 +84,11 @@ external launchers, appearance settings, persistence boundaries, and unsafe-URL 
 
 - Renderer isolation is enabled (`contextIsolation`, sandbox, no Node integration).
 - The renderer can access only the explicit preload bridge.
-- Spotify and YouTube frames/scripts are restricted to official HTTPS origins by Content Security Policy.
+- Spotify and YouTube frames, scripts, media, artwork, and API connections are restricted to official HTTPS origins by Content Security Policy.
+- Spotify uses Authorization Code with PKCE. Refresh credentials are encrypted with Electron `safeStorage` on Windows and are never written to the repository.
 - Windows media commands accept only four fixed virtual-key actions; arbitrary keys or commands cannot cross the preload bridge.
 - External destinations must use HTTP or HTTPS and open outside Electron.
 - Local state is capped at 2 MB and written atomically.
-- There is no analytics, telemetry, camera request, or API-key store. Any sign-in shown inside an official embed remains provider-owned.
+- There is no analytics, telemetry, camera request, or client-secret store. Spotify authorization is provider-owned and opened in the default browser.
 
 See [Architecture](docs/ARCHITECTURE.md), [XREAL integration](docs/XREAL_INTEGRATION.md), [Roadmap](docs/ROADMAP.md), [Contributing](CONTRIBUTING.md), and [Security](SECURITY.md).

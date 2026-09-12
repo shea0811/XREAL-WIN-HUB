@@ -4,11 +4,14 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://open.spotify.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* https://open.spotify.com https://www.youtube.com; frame-src https://open.spotify.com https://www.youtube.com https://www.youtube-nocookie.com; font-src 'self' data:"
+      content="default-src 'self'; script-src 'self' https://open.spotify.com https://sdk.scdn.co https://www.youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.scdn.co https://*.scdn.co https://i.ytimg.com; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* https://open.spotify.com https://accounts.spotify.com https://api.spotify.com https://*.spotify.com https://*.scdn.co wss://*.spotify.com https://www.youtube.com; frame-src https://open.spotify.com https://www.youtube.com https://www.youtube-nocookie.com; media-src blob: https://*.spotify.com https://*.scdn.co; worker-src blob:; font-src 'self' data:"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#070b12" />
     <meta name="description" content="XREAL WIN HUB desktop command centre" />
+    <link rel="preconnect" href="https://open.spotify.com" crossorigin />
+    <link rel="preconnect" href="https://sdk.scdn.co" crossorigin />
+    <link rel="preconnect" href="https://www.youtube.com" crossorigin />
     <link rel="icon" href="/xr-mark.svg" />
     <title>XREAL WIN HUB</title>
   </head>

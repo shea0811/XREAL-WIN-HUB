@@ -1,10 +1,11 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell } = require('electron');
 const { execFile, spawn } = require('node:child_process');
 const { promises: fs } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
+const { createSpotifyAuth } = require('./spotify-auth.cjs');
 
 const execFileAsync = promisify(execFile);
 
@@ -30,6 +31,11 @@ const channels = Object.freeze({
   displayRevert: 'display:revert',
   displayIdentify: 'display:identify',
   mediaKey: 'media:key',
+  spotifyStatus: 'spotify:status',
+  spotifyConnect: 'spotify:connect',
+  spotifyDisconnect: 'spotify:disconnect',
+  spotifyToken: 'spotify:token',
+  spotifyPlay: 'spotify:play',
 });
 
 const SIMULATED_DISPLAY_ID = 'xreal-one-pro-simulated';
@@ -39,6 +45,7 @@ let mainWindow = null;
 let simulationEnabled = false;
 let simulatedLayoutOverride = null;
 let pendingDisplayTransaction = null;
+const spotifyAuth = createSpotifyAuth({ app, safeStorage, shell });
 
 function statePath() {
   return path.join(app.getPath('userData'), STATE_FILE);
@@ -507,6 +514,13 @@ function registerIpc() {
   ipcMain.handle(channels.displayRevert, revertDisplayLayout);
   ipcMain.handle(channels.displayIdentify, identifyDisplays);
   ipcMain.handle(channels.mediaKey, (_event, command) => sendMediaKey(command));
+  ipcMain.handle(channels.spotifyStatus, () => spotifyAuth.getStatus());
+  ipcMain.handle(channels.spotifyConnect, (_event, clientId) => spotifyAuth.connect(clientId));
+  ipcMain.handle(channels.spotifyDisconnect, () => spotifyAuth.disconnect());
+  ipcMain.handle(channels.spotifyToken, () => spotifyAuth.accessToken());
+  ipcMain.handle(channels.spotifyPlay, (_event, source, deviceId) =>
+    spotifyAuth.playSource(source, deviceId),
+  );
 }
 
 async function createWindow() {

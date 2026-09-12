@@ -1,6 +1,6 @@
 {
   "name": "xreal-win-hub",
-  "version": "0.2.0-beta.4",
+  "version": "0.2.0-beta.5",
   "private": true,
   "author": "XREAL WIN HUB contributors",
   "description": "A local-first Windows command centre for XREAL displays, workspaces, notes, entertainment, and gesture-ready workflows.",
@@ -17,7 +17,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run test && npm run build && node --check electron/main.cjs && node --check electron/preload.cjs",
+    "check": "npm run test && npm run build && node --check electron/main.cjs && node --check electron/preload.cjs && node --check electron/spotify-auth.cjs",
     "package:win": "npm run build && electron-builder --win nsis",
     "package:dir": "npm run build && electron-builder --dir"
   },

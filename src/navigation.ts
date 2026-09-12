@@ -7,7 +7,9 @@ import {
   NotebookPen,
   PanelsTopLeft,
   MonitorCog,
+  Music2,
   Settings,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import type { HubSection } from './types';
@@ -86,6 +88,24 @@ export const NAVIGATION: NavigationItem[] = [
   },
 ];
 
+export const MEDIA_NAVIGATION: Record<'spotify' | 'youtube', NavigationItem> = {
+  spotify: {
+    id: 'spotify',
+    label: 'Spotify',
+    shortLabel: 'Spotify',
+    description: 'Premium music player',
+    icon: Music2,
+  },
+  youtube: {
+    id: 'youtube',
+    label: 'YouTube',
+    shortLabel: 'YouTube',
+    description: 'Video and playlist player',
+    icon: Video,
+  },
+};
+
 export function getNavigationItem(section: HubSection) {
-  return NAVIGATION.find((item) => item.id === section) ?? NAVIGATION[0];
+  return NAVIGATION.find((item) => item.id === section)
+    ?? (section === 'spotify' || section === 'youtube' ? MEDIA_NAVIGATION[section] : NAVIGATION[0]);
 }

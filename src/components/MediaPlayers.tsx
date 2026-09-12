@@ -25,7 +25,7 @@ interface YouTubePlayer {
   cuePlaylist(options: { list: string; listType: 'playlist'; index: number }): void;
   cueVideoById(videoId: string): void;
   getPlayerState(): number;
-  getVideoData(): { title?: string };
+  getVideoData(): { author?: string; title?: string; video_id?: string };
   getVolume(): number;
   nextVideo(): void;
   pauseVideo(): void;
@@ -51,16 +51,50 @@ interface YouTubeApi {
   ) => YouTubePlayer;
 }
 
+interface SpotifyPlaybackTrack {
+  name: string;
+  uri: string;
+  artists: Array<{ name: string }>;
+  album: { images: Array<{ url: string }> };
+}
+
+interface SpotifyPlaybackState {
+  paused: boolean;
+  track_window: { current_track: SpotifyPlaybackTrack };
+}
+
+interface SpotifySdkPlayer {
+  addListener(event: string, callback: (...args: any[]) => void): boolean;
+  activateElement(): Promise<void>;
+  connect(): Promise<boolean>;
+  disconnect(): void;
+  nextTrack(): Promise<void>;
+  previousTrack(): Promise<void>;
+  setVolume(value: number): Promise<void>;
+  togglePlay(): Promise<void>;
+}
+
+interface SpotifySdk {
+  Player: new (options: {
+    name: string;
+    getOAuthToken(callback: (token: string) => void): void;
+    volume: number;
+  }) => SpotifySdkPlayer;
+}
+
 declare global {
   interface Window {
     onSpotifyIframeApiReady?: (api: SpotifyIframeApi) => void;
     onYouTubeIframeAPIReady?: () => void;
     YT?: YouTubeApi;
+    Spotify?: SpotifySdk;
+    onSpotifyWebPlaybackSDKReady?: () => void;
   }
 }
 
 let spotifyApiPromise: Promise<SpotifyIframeApi> | null = null;
 let youtubeApiPromise: Promise<YouTubeApi> | null = null;
+let spotifySdkPromise: Promise<SpotifySdk> | null = null;
 
 function loadSpotifyApi() {
   if (!spotifyApiPromise) {
@@ -98,6 +132,27 @@ function loadYouTubeApi() {
     });
   }
   return youtubeApiPromise;
+}
+
+function loadSpotifySdk() {
+  if (window.Spotify?.Player) return Promise.resolve(window.Spotify);
+  if (!spotifySdkPromise) {
+    spotifySdkPromise = new Promise((resolve, reject) => {
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        if (window.Spotify) resolve(window.Spotify);
+        else reject(new Error('Spotify Playback SDK was not available.'));
+      };
+      const existing = document.querySelector<HTMLScriptElement>('script[data-media-api="spotify-premium"]');
+      if (existing) return;
+      const script = document.createElement('script');
+      script.src = 'https://sdk.scdn.co/spotify-player.js';
+      script.async = true;
+      script.dataset.mediaApi = 'spotify-premium';
+      script.onerror = () => reject(new Error('Spotify Playback SDK failed to load.'));
+      document.head.append(script);
+    });
+  }
+  return spotifySdkPromise;
 }
 
 export function isSpotifySource(value: string) {
@@ -247,6 +302,148 @@ export function SpotifyPlayer({ source }: { source: string }) {
   return <div className="embedded-player embedded-player--spotify" ref={hostRef} aria-label="Spotify player" />;
 }
 
+export function SpotifyPremiumPlayer({
+  source,
+  requestVersion,
+}: {
+  source: string;
+  requestVersion: number;
+}) {
+  const playerRef = useRef<SpotifySdkPlayer | null>(null);
+  const deviceIdRef = useRef<string | null>(null);
+  const lastRequestRef = useRef(0);
+  const sourceRef = useRef(source);
+  const requestVersionRef = useRef(requestVersion);
+  const { registerController, updateStatus } = useMedia();
+
+  sourceRef.current = source;
+  requestVersionRef.current = requestVersion;
+
+  useEffect(() => {
+    let active = true;
+    let player: SpotifySdkPlayer | null = null;
+    const unregister = registerController('spotify', {
+      previous: () => playerRef.current?.previousTrack(),
+      toggle: () => playerRef.current?.togglePlay(),
+      next: () => playerRef.current?.nextTrack(),
+      setVolume: async (value) => {
+        await playerRef.current?.setVolume(value / 100);
+        updateStatus('spotify', { volume: value, message: undefined });
+      },
+    });
+
+    updateStatus('spotify', {
+      ready: false,
+      active: false,
+      volumeMode: 'player',
+      detail: 'Connecting Spotify Premium…',
+      message: undefined,
+    });
+
+    void loadSpotifySdk().then((sdk) => {
+      if (!active) return;
+      player = new sdk.Player({
+        name: 'XREAL WIN HUB',
+        volume: 0.5,
+        getOAuthToken: (callback) => {
+          void platform.getSpotifyAccessToken().then((token) => {
+            if (token) callback(token);
+            else updateStatus('spotify', { message: 'Spotify authorization expired. Reconnect your account.' });
+          });
+        },
+      });
+      playerRef.current = player;
+      player.addListener('ready', ({ device_id: deviceId }: { device_id: string }) => {
+        if (!active) return;
+        deviceIdRef.current = deviceId;
+        updateStatus('spotify', {
+          ready: true,
+          active: true,
+          detail: 'Spotify Premium ready',
+          volume: 50,
+          volumeMode: 'player',
+          message: undefined,
+        });
+        const pendingVersion = requestVersionRef.current;
+        const pendingSource = sourceRef.current;
+        if (pendingVersion && pendingVersion !== lastRequestRef.current && isSpotifySource(pendingSource)) {
+          lastRequestRef.current = pendingVersion;
+          void player?.activateElement()
+            .then(() => platform.playSpotifySource(pendingSource, deviceId))
+            .then((played) => {
+              if (!played) throw new Error('Spotify did not accept the playback request.');
+              updateStatus('spotify', { message: undefined });
+            })
+            .catch((error) => updateStatus('spotify', {
+              message: error instanceof Error ? error.message : 'Spotify could not play that link.',
+            }));
+        }
+      });
+      player.addListener('not_ready', () => updateStatus('spotify', {
+        ready: false,
+        active: false,
+        message: 'Spotify Premium lost its playback connection.',
+      }));
+      player.addListener('player_state_changed', (state: SpotifyPlaybackState | null) => {
+        if (!state || !active) return;
+        const track = state.track_window.current_track;
+        updateStatus('spotify', {
+          ready: true,
+          active: true,
+          playing: !state.paused,
+          title: track.name || 'Spotify',
+          detail: track.artists.map((artist) => artist.name).join(', ') || 'Spotify Premium',
+          artwork: track.album.images[0]?.url,
+          message: undefined,
+        });
+      });
+      for (const event of ['initialization_error', 'authentication_error', 'account_error', 'playback_error']) {
+        player.addListener(event, ({ message }: { message: string }) => updateStatus('spotify', {
+          ready: false,
+          active: false,
+          message: event === 'initialization_error'
+            ? 'This Electron build cannot initialise Spotify encrypted playback. The embed fallback remains available.'
+            : message,
+        }));
+      }
+      void player.connect().then((connected) => {
+        if (!connected) updateStatus('spotify', { message: 'Spotify Premium could not connect to playback.' });
+      });
+    }).catch(() => updateStatus('spotify', {
+      ready: false,
+      active: false,
+      message: 'Spotify Premium SDK could not load. Check the connection and try again.',
+    }));
+
+    return () => {
+      active = false;
+      unregister();
+      player?.disconnect();
+      playerRef.current = null;
+      deviceIdRef.current = null;
+    };
+  }, [registerController, updateStatus]);
+
+  useEffect(() => {
+    if (!requestVersion || requestVersion === lastRequestRef.current) return;
+    const deviceId = deviceIdRef.current;
+    if (!deviceId || !isSpotifySource(source)) {
+      updateStatus('spotify', { message: 'Spotify Premium is preparing the player. Your link will load automatically.' });
+      return;
+    }
+    lastRequestRef.current = requestVersion;
+    void playerRef.current?.activateElement()
+      .then(() => platform.playSpotifySource(source, deviceId))
+      .then((played) => {
+        if (!played) throw new Error('Spotify did not accept the playback request.');
+        updateStatus('spotify', { message: undefined });
+      })
+      .catch((error) => updateStatus('spotify', { message: error.message || 'Spotify could not play that link.' }));
+  }, [requestVersion, source, updateStatus]);
+
+  return <div className="premium-player-runtime" aria-label="Spotify Premium player" />;
+}
+
 export function YouTubePlayer({ source }: { source: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
@@ -289,15 +486,24 @@ export function YouTubePlayer({ source }: { source: string }) {
               cueYouTubeSource(target, parsed);
               updateStatus('youtube', {
                 ready: true,
+                active: true,
                 title: target.getVideoData().title || 'YouTube',
-                detail: parsed?.playlistId ? 'YouTube playlist in Hub' : 'YouTube video in Hub',
+                detail: target.getVideoData().author || (parsed?.playlistId ? 'YouTube playlist in Hub' : 'YouTube video in Hub'),
+                artwork: target.getVideoData().video_id
+                  ? `https://i.ytimg.com/vi/${target.getVideoData().video_id}/hqdefault.jpg`
+                  : undefined,
                 volume: target.getVolume(),
                 message: undefined,
               });
             },
             onStateChange: ({ data, target }) => updateStatus('youtube', {
               playing: data === 1,
+              active: true,
               title: target.getVideoData().title || 'YouTube',
+              detail: target.getVideoData().author || 'YouTube',
+              artwork: target.getVideoData().video_id
+                ? `https://i.ytimg.com/vi/${target.getVideoData().video_id}/hqdefault.jpg`
+                : undefined,
               message: undefined,
             }),
             onError: ({ data }) => updateStatus('youtube', {

@@ -236,7 +236,7 @@ describe('application shell', () => {
 
     await click(buttonContaining('Entertainment'));
     await click(buttonContaining('YouTube'));
-    expect(container.querySelector<HTMLSelectElement>('[aria-label="Entertainment service"]')?.value).toBe('youtube');
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('YouTube');
     expect(container.querySelector('[aria-label="YouTube player"]')).not.toBeNull();
     expect(open).not.toHaveBeenCalled();
 
@@ -270,11 +270,13 @@ describe('application shell', () => {
     expect(container.querySelector<HTMLButtonElement>('[aria-label="Previous"]')).not.toBeNull();
     expect(container.querySelector<HTMLButtonElement>('[aria-label="Play"]')).not.toBeNull();
     expect(container.querySelector<HTMLButtonElement>('[aria-label="Next"]')).not.toBeNull();
-    expect(container.textContent).toContain('Windows volume');
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Spotify volume"]')).not.toBeNull();
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('Home');
 
     await click(container.querySelector<HTMLButtonElement>('[aria-label="Open YouTube controls"]') ?? undefined);
     expect(container.querySelector('[aria-label="YouTube controls"]')).not.toBeNull();
     expect(container.querySelector<HTMLInputElement>('[aria-label="YouTube volume"]')).not.toBeNull();
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('Home');
   });
 
   it('applies appearance settings and operates the command palette', async () => {

@@ -20,6 +20,11 @@ const channels = Object.freeze({
   displayRevert: 'display:revert',
   displayIdentify: 'display:identify',
   mediaKey: 'media:key',
+  spotifyStatus: 'spotify:status',
+  spotifyConnect: 'spotify:connect',
+  spotifyDisconnect: 'spotify:disconnect',
+  spotifyToken: 'spotify:token',
+  spotifyPlay: 'spotify:play',
 });
 
 contextBridge.exposeInMainWorld('xrealHub', {
@@ -41,6 +46,11 @@ contextBridge.exposeInMainWorld('xrealHub', {
   revertDisplayLayout: () => ipcRenderer.invoke(channels.displayRevert),
   identifyDisplays: () => ipcRenderer.invoke(channels.displayIdentify),
   sendMediaKey: (command) => ipcRenderer.invoke(channels.mediaKey, command),
+  getSpotifyAuthStatus: () => ipcRenderer.invoke(channels.spotifyStatus),
+  connectSpotify: (clientId) => ipcRenderer.invoke(channels.spotifyConnect, clientId),
+  disconnectSpotify: () => ipcRenderer.invoke(channels.spotifyDisconnect),
+  getSpotifyAccessToken: () => ipcRenderer.invoke(channels.spotifyToken),
+  playSpotifySource: (source, deviceId) => ipcRenderer.invoke(channels.spotifyPlay, source, deviceId),
   onSystemSnapshot: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on(channels.snapshotChanged, listener);

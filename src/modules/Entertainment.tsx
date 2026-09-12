@@ -2,7 +2,6 @@ import { type CSSProperties, useState } from 'react';
 import {
   ArrowUpRight,
   Gamepad2,
-  Link2,
   Maximize2,
   MonitorPlay,
   Music2,
@@ -12,14 +11,6 @@ import {
   Volume2,
 } from 'lucide-react';
 import { MediaBrandIcon, type MediaService } from '../components/MediaBrandIcon';
-import {
-  DEFAULT_SPOTIFY_SOURCE,
-  DEFAULT_YOUTUBE_SOURCE,
-  isSpotifySource,
-  parseYouTubeSource,
-  SpotifyPlayer,
-  YouTubePlayer,
-} from '../components/MediaPlayers';
 import { Button, SectionHeading, StatusPill, Toggle } from '../components/ui';
 import { platform } from '../services/platform';
 import { useHub } from '../state/HubContext';
@@ -33,42 +24,19 @@ const EXTERNAL_SERVICES = [
   { name: 'Plex', type: 'Personal media', url: 'https://app.plex.tv', monogram: 'PX', color: '#e5b84b' },
 ];
 
-function savedSource(key: string, fallback: string) {
-  try {
-    return localStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveSource(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Playback still works when storage is unavailable; only persistence is skipped.
-  }
-}
-
 export function Entertainment({
   snapshot,
   onToast,
+  onOpenMedia,
 }: {
   snapshot: SystemSnapshot | null;
   onToast(message: string, detail?: string): void;
+  onOpenMedia(service: MediaService): void;
 }) {
   const { state, recordActivity } = useHub();
-  const { activeService, setActiveService, status } = useMedia();
+  const { enableService } = useMedia();
   const [theatre, setTheatre] = useState(false);
   const [spatialAudio, setSpatialAudio] = useState(false);
-  const [spotifySource, setSpotifySource] = useState(() => {
-    const saved = savedSource('xreal-win-hub:spotify-source', DEFAULT_SPOTIFY_SOURCE);
-    return isSpotifySource(saved) ? saved : DEFAULT_SPOTIFY_SOURCE;
-  });
-  const [youtubeSource, setYouTubeSource] = useState(() => {
-    const saved = savedSource('xreal-win-hub:youtube-source', DEFAULT_YOUTUBE_SOURCE);
-    return parseYouTubeSource(saved) ? saved : DEFAULT_YOUTUBE_SOURCE;
-  });
-  const [sourceDraft, setSourceDraft] = useState(() => spotifySource);
   const selectedDisplay = snapshot?.displays.find(
     (display) => display.id === state.settings.preferredDisplayId,
   );
@@ -93,38 +61,9 @@ export function Entertainment({
     }
   }
 
-  function selectService(service: MediaService) {
-    setActiveService(service);
-    setSourceDraft(service === 'spotify' ? spotifySource : youtubeSource);
-  }
-
-  function loadSource() {
-    const source = sourceDraft.trim();
-    const valid = activeService === 'spotify'
-      ? isSpotifySource(source)
-      : Boolean(parseYouTubeSource(source));
-    if (!valid) {
-      onToast(
-        `That ${activeService === 'spotify' ? 'Spotify' : 'YouTube'} link is not supported`,
-        activeService === 'spotify'
-          ? 'Paste a Spotify track, album, playlist, show, episode, or artist link.'
-          : 'Paste a YouTube video, Short, or playlist link.',
-      );
-      return;
-    }
-    if (activeService === 'spotify') {
-      setSpotifySource(source);
-      saveSource('xreal-win-hub:spotify-source', source);
-    } else {
-      setYouTubeSource(source);
-      saveSource('xreal-win-hub:youtube-source', source);
-    }
-    recordActivity({
-      kind: 'workspace',
-      title: `${activeService === 'spotify' ? 'Spotify' : 'YouTube'} loaded in Hub`,
-      detail: 'The media player stayed inside Entertainment.',
-    });
-    onToast(`${activeService === 'spotify' ? 'Spotify' : 'YouTube'} loaded in Hub`);
+  function openIntegratedService(service: MediaService) {
+    enableService(service);
+    onOpenMedia(service);
   }
 
   async function openExternal(service: (typeof EXTERNAL_SERVICES)[number]) {
@@ -150,7 +89,7 @@ export function Entertainment({
       <SectionHeading
         eyebrow="Lean back"
         title="Entertainment"
-        description="Keep Spotify and YouTube playback inside the Hub, with controls available from every page."
+        description="Launch persistent Spotify and YouTube pages, or open protected streaming services safely."
         actions={
           <Button variant="primary" onClick={() => void toggleTheatre(!theatre)}>
             <Maximize2 size={17} /> {theatre ? 'Exit theatre' : 'Enter theatre'}
@@ -158,76 +97,38 @@ export function Entertainment({
         }
       />
 
-      <section className="media-hub card-surface">
-        <header className="media-hub__header">
-          <div className="media-service-picker">
-            <MediaBrandIcon service={activeService} width={25} height={25} />
-            <label htmlFor="media-service">Player</label>
-            <select
-              id="media-service"
-              aria-label="Entertainment service"
-              value={activeService}
-              onChange={(event) => selectService(event.target.value as MediaService)}
-            >
-              <option value="spotify">Spotify</option>
-              <option value="youtube">YouTube</option>
-            </select>
-          </div>
-          <StatusPill tone={status[activeService].ready ? 'positive' : 'neutral'}>
-            {status[activeService].ready ? 'Player ready' : 'Connecting'}
-          </StatusPill>
-        </header>
-
-        <div className="media-hub__source">
-          <Link2 size={16} aria-hidden />
-          <input
-            aria-label={`${activeService === 'spotify' ? 'Spotify' : 'YouTube'} link`}
-            value={sourceDraft}
-            onChange={(event) => setSourceDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') loadSource();
-            }}
-            placeholder={activeService === 'spotify' ? 'Paste a Spotify link' : 'Paste a YouTube link'}
-          />
-          <Button onClick={loadSource}>Load in Hub</Button>
+      <section className="entertainment-launch card-surface">
+        <div>
+          <StatusPill tone="positive"><Sparkles size={12} /> Persistent players</StatusPill>
+          <h2>Choose a service to add its page.</h2>
+          <p>
+            Spotify or YouTube appears directly beneath Entertainment in the navigation while it is in use.
+            Playback and the top-bar controls stay available as you move around the Hub.
+          </p>
         </div>
-
-        <div className="media-hub__stage" data-service={activeService}>
-          <div hidden={activeService !== 'spotify'}>
-            <SpotifyPlayer source={spotifySource} />
-          </div>
-          <div hidden={activeService !== 'youtube'}>
-            <YouTubePlayer source={youtubeSource} />
-          </div>
+        <div className="entertainment-launch__brands" aria-hidden>
+          <MediaBrandIcon service="spotify" width={64} height={64} />
+          <MediaBrandIcon service="youtube" width={64} height={64} />
         </div>
-
-        <footer className="media-hub__footer">
-          <span><Sparkles size={15} /> Playback stays mounted when you move around the Hub.</span>
-          <small>
-            {activeService === 'spotify'
-              ? 'Spotify skip and volume use Windows media controls; play/pause uses the official embed.'
-              : 'YouTube video, playlist, skip, play/pause, and volume use the official player API.'}
-          </small>
-        </footer>
       </section>
 
       <section className="content-section">
         <div className="section-row-heading">
           <div><span className="eyebrow">Your services</span><h2>Choose what plays in the Hub</h2></div>
-          <span className="subtle-copy">Spotify and YouTube stay in-app</span>
+          <span className="subtle-copy">Spotify and YouTube get dedicated pages</span>
         </div>
         <div className="service-grid">
           {(['spotify', 'youtube'] as const).map((service) => (
             <button
               className="service-card service-card--integrated"
               key={service}
-              onClick={() => selectService(service)}
+              onClick={() => openIntegratedService(service)}
               style={{ '--service-color': service === 'spotify' ? '#43d989' : '#ff5f68' } as CSSProperties}
             >
               <span className="service-card__brand"><MediaBrandIcon service={service} width={28} height={28} /></span>
               <span className="service-card__copy">
-                <strong>{service === 'spotify' ? 'Spotify' : 'YouTube'}</strong>
-                <small>Integrated player</small>
+                <strong>{service === 'spotify' ? 'Spotify Premium' : 'YouTube'}</strong>
+                <small>Open dedicated player</small>
               </span>
               <span className="service-card__in-app">In Hub</span>
             </button>

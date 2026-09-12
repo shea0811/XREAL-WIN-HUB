@@ -197,6 +197,30 @@ const browserBridge: XrealHubBridge = {
   async sendMediaKey() {
     return false;
   },
+  async getSpotifyAuthStatus() {
+    return {
+      supported: false,
+      configured: false,
+      connected: false,
+      clientId: null,
+      accountName: null,
+      product: null,
+      redirectUri: 'http://127.0.0.1/callback',
+      message: 'Spotify Premium sign-in is available in the installed Windows app.',
+    };
+  },
+  async connectSpotify() {
+    return this.getSpotifyAuthStatus();
+  },
+  async disconnectSpotify() {
+    return this.getSpotifyAuthStatus();
+  },
+  async getSpotifyAccessToken() {
+    return null;
+  },
+  async playSpotifySource() {
+    return false;
+  },
   onSystemSnapshot(callback) {
     browserSnapshotListeners.add(callback);
     return () => browserSnapshotListeners.delete(callback);

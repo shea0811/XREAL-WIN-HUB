@@ -14,6 +14,7 @@ import { DeviceCenter } from './modules/DeviceCenter';
 import { DisplayStudio } from './modules/DisplayStudio';
 import { Entertainment } from './modules/Entertainment';
 import { Gestures } from './modules/Gestures';
+import { MediaServicePage } from './modules/MediaServicePage';
 import { Notes } from './modules/Notes';
 import { Workspaces } from './modules/Workspaces';
 import { Agents } from './modules/Agents';
@@ -294,6 +295,9 @@ function AppShell() {
         return <DisplayStudio snapshot={snapshot} onToast={showToast} />;
       case 'entertainment':
         return null;
+      case 'spotify':
+      case 'youtube':
+        return null;
       case 'notes':
         return <Notes onToast={showToast} />;
       case 'workspaces':
@@ -328,7 +332,17 @@ function AppShell() {
         />
         <main className="content-scroll" tabIndex={-1}>
           <div hidden={activeSection !== 'entertainment'}>
-            <Entertainment snapshot={snapshot} onToast={showToast} />
+            <Entertainment
+              snapshot={snapshot}
+              onToast={showToast}
+              onOpenMedia={(service) => navigate(service)}
+            />
+          </div>
+          <div hidden={activeSection !== 'spotify'}>
+            <MediaServicePage service="spotify" onToast={showToast} />
+          </div>
+          <div hidden={activeSection !== 'youtube'}>
+            <MediaServicePage service="youtube" onToast={showToast} />
           </div>
           {page}
         </main>

@@ -3,6 +3,8 @@ export type HubSection =
   | 'device'
   | 'display-studio'
   | 'entertainment'
+  | 'spotify'
+  | 'youtube'
   | 'notes'
   | 'workspaces'
   | 'gestures'
@@ -193,6 +195,17 @@ export interface WorkspaceLaunchResult {
   moved: boolean;
 }
 
+export interface SpotifyAuthStatus {
+  supported: boolean;
+  configured: boolean;
+  connected: boolean;
+  clientId: string | null;
+  accountName: string | null;
+  product: string | null;
+  redirectUri: string;
+  message?: string;
+}
+
 export interface XrealHubBridge {
   loadState(): Promise<unknown>;
   saveState(state: HubState): Promise<boolean>;
@@ -213,6 +226,11 @@ export interface XrealHubBridge {
   revertDisplayLayout(): Promise<DisplayLayoutSnapshot>;
   identifyDisplays(): Promise<boolean>;
   sendMediaKey(command: 'previous' | 'next' | 'volume-up' | 'volume-down'): Promise<boolean>;
+  getSpotifyAuthStatus(): Promise<SpotifyAuthStatus>;
+  connectSpotify(clientId: string): Promise<SpotifyAuthStatus>;
+  disconnectSpotify(): Promise<SpotifyAuthStatus>;
+  getSpotifyAccessToken(): Promise<string | null>;
+  playSpotifySource(source: string, deviceId: string): Promise<boolean>;
   onSystemSnapshot(callback: (snapshot: SystemSnapshot) => void): () => void;
 }
 

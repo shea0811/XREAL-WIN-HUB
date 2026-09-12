@@ -101,7 +101,11 @@ export function TopBar({
           {mediaMenu && mediaStatus ? (
             <section className="media-popover" aria-label={`${mediaMenu === 'spotify' ? 'Spotify' : 'YouTube'} controls`}>
               <header>
-                <MediaBrandIcon service={mediaMenu} width={30} height={30} />
+                {mediaStatus.artwork ? (
+                  <img src={mediaStatus.artwork} alt="" className="media-popover__artwork" />
+                ) : (
+                  <MediaBrandIcon service={mediaMenu} width={30} height={30} />
+                )}
                 <span>
                   <strong>{mediaStatus.title}</strong>
                   <small>{mediaStatus.ready ? mediaStatus.detail : 'Player is connecting…'}</small>
@@ -122,29 +126,19 @@ export function TopBar({
                   <SkipForward size={18} />
                 </button>
               </div>
-              {mediaMenu === 'youtube' ? (
-                <label className="media-popover__volume">
-                  <Volume1 size={16} aria-hidden />
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={mediaStatus.volume}
-                    onChange={(event) => media.run(mediaMenu, 'volume', Number(event.target.value))}
-                    aria-label="YouTube volume"
-                  />
-                  <Volume2 size={16} aria-hidden />
-                  <span>{mediaStatus.volume}%</span>
-                </label>
-              ) : (
-                <div className="media-popover__system-volume">
-                  <span><Volume2 size={15} /> Windows volume</span>
-                  <div>
-                    <button onClick={() => media.run(mediaMenu, 'volume', mediaStatus.volume - 2)} aria-label="Volume down">−</button>
-                    <button onClick={() => media.run(mediaMenu, 'volume', mediaStatus.volume + 2)} aria-label="Volume up">+</button>
-                  </div>
-                </div>
-              )}
+              <label className="media-popover__volume">
+                <Volume1 size={16} aria-hidden />
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={mediaStatus.volume}
+                  onChange={(event) => media.run(mediaMenu, 'volume', Number(event.target.value))}
+                  aria-label={`${mediaMenu === 'spotify' ? 'Spotify' : 'YouTube'} volume`}
+                />
+                <Volume2 size={16} aria-hidden />
+                <span>{mediaStatus.volume}%</span>
+              </label>
               {mediaStatus.message ? <p>{mediaStatus.message}</p> : null}
             </section>
           ) : null}

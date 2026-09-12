@@ -1,5 +1,6 @@
 import { ChevronsLeft, ChevronsRight, ShieldCheck } from 'lucide-react';
-import { NAVIGATION } from '../navigation';
+import { MEDIA_NAVIGATION, NAVIGATION } from '../navigation';
+import { useMedia } from '../state/MediaContext';
 import type { HubSection } from '../types';
 import { Brand } from './Brand';
 
@@ -14,6 +15,15 @@ export function Sidebar({
   onNavigate(section: HubSection): void;
   onToggle(): void;
 }) {
+  const { enabledServices } = useMedia();
+  const items = NAVIGATION.flatMap((item) => {
+    if (item.id !== 'entertainment') return [item];
+    const mediaItems = (['spotify', 'youtube'] as const)
+      .filter((service) => enabledServices[service])
+      .map((service) => MEDIA_NAVIGATION[service]);
+    return [item, ...mediaItems];
+  });
+
   return (
     <aside className="sidebar" data-collapsed={collapsed}>
       <div className="sidebar__top">
@@ -29,7 +39,7 @@ export function Sidebar({
       </div>
 
       <nav className="sidebar__nav" aria-label="Main navigation">
-        {NAVIGATION.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active = activeSection === item.id;
           return (
