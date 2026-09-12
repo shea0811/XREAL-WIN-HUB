@@ -10,7 +10,7 @@ A local-first Windows command centre for XREAL displays. It brings display place
 - **XREAL device centre** — Windows display discovery, preferred-display selection, window placement, and theatre mode.
 - **Display Layout Studio** — draggable physical/XREAL topology, screen identification, primary-display selection, edge snapping, guarded Windows apply, and automatic rollback.
 - **One Pro simulator** — deterministic 1920×1080 virtual-device mode for testing connection-dependent flows without hardware.
-- **Entertainment deck** — full-screen setup and secure browser launchers for DRM-compatible playback.
+- **Entertainment hub** — persistent in-app Spotify and YouTube embeds, saved media links, top-bar transport controls, and secure browser launchers for DRM-only services.
 - **Notes & study** — searchable, autosaved notebooks organised into sections and pages with lightweight tags.
 - **Workspaces** — built-in study, cyber lab, entertainment, and service-desk launch profiles plus custom launchers.
 - **Gesture studio** — six configurable mappings with keyboard simulation and a stable adapter boundary for future hardware input.
@@ -30,6 +30,7 @@ A local-first Windows command centre for XREAL displays. It brings display place
 | Gesture configuration and execution | Ready | Keyboard simulation (`Ctrl+Shift+1` through `6`) |
 | Simulated One Pro connection | Ready | In-app virtual display and connection-event provider |
 | Arrange the Windows desktop | Ready | Native display enumeration, position-only batch apply, 15-second confirmation, and independent 20-second rollback watcher |
+| Play Spotify and YouTube in the Hub | Ready | Official credential-free embeds; YouTube has direct transport/volume control and Spotify uses direct play/pause plus allowlisted Windows media keys for skip/volume |
 | XREAL Eye/native hand input on Windows | Planned | Provider adapter; no undocumented SDK assumptions |
 | Spatial anchoring and hardware controls | Planned | Requires a supported native integration path |
 
@@ -66,15 +67,17 @@ npm run package:win
 The Windows installer is emitted to `release/`. The build is unsigned until a Windows code-signing certificate is configured.
 
 The automated suite covers application startup rendering, all primary modules,
-One Pro simulation, display topology validation and previews, display events, notes, gesture actions, external launchers,
-appearance settings, persistence boundaries, and unsafe-URL rejection.
+One Pro simulation, display topology validation and previews, display events, notes, gesture actions, embedded-media URL validation,
+external launchers, appearance settings, persistence boundaries, and unsafe-URL rejection.
 
 ## Security and privacy
 
 - Renderer isolation is enabled (`contextIsolation`, sandbox, no Node integration).
 - The renderer can access only the explicit preload bridge.
+- Spotify and YouTube frames/scripts are restricted to official HTTPS origins by Content Security Policy.
+- Windows media commands accept only four fixed virtual-key actions; arbitrary keys or commands cannot cross the preload bridge.
 - External destinations must use HTTP or HTTPS and open outside Electron.
 - Local state is capped at 2 MB and written atomically.
-- There is no analytics, telemetry, camera request, API-key store, or embedded account login.
+- There is no analytics, telemetry, camera request, or API-key store. Any sign-in shown inside an official embed remains provider-owned.
 
 See [Architecture](docs/ARCHITECTURE.md), [XREAL integration](docs/XREAL_INTEGRATION.md), [Roadmap](docs/ROADMAP.md), [Contributing](CONTRIBUTING.md), and [Security](SECURITY.md).

@@ -212,6 +212,7 @@ export interface XrealHubBridge {
   confirmDisplayLayout(): Promise<boolean>;
   revertDisplayLayout(): Promise<DisplayLayoutSnapshot>;
   identifyDisplays(): Promise<boolean>;
+  sendMediaKey(command: 'previous' | 'next' | 'volume-up' | 'volume-down'): Promise<boolean>;
   onSystemSnapshot(callback: (snapshot: SystemSnapshot) => void): () => void;
 }
 

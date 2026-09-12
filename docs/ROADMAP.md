@@ -16,7 +16,8 @@
 - Move recent activity from Home to Settings and diagnostics. ✅
 - Add a safe visual editor for connected Windows/XREAL display topology. ✅
 - Add an XREAL-targeted overlay and local Windows media-session listener.
-- Expand Entertainment into a hybrid embedded/app-launching hub.
+- Expand Entertainment into a hybrid embedded/app-launching hub. ✅
+- Add persistent Spotify/YouTube players and global top-bar media controls. ✅
 - Add capability-tested brightness and electrochromic controls without undocumented assumptions.
 - Persist and restore window geometry per display.
 - Workspace target editing and richer layout orchestration.

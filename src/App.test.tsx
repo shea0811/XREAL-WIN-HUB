@@ -76,7 +76,7 @@ describe('application shell', () => {
     const modules = [
       ['XREAL device', 'XREAL device centre'],
       ['Display Layout Studio', 'Desktop coordinate space'],
-      ['Entertainment', 'What do you want to watch?'],
+      ['Entertainment', 'Choose what plays in the Hub'],
       ['Notes & study', 'Local notebook'],
       ['Workspaces', 'One-click setups'],
       ['Gestures', 'Gesture studio'],
@@ -230,14 +230,19 @@ describe('application shell', () => {
     expect(container.textContent).toContain('One Pro simulator connected');
   });
 
-  it('launches entertainment, workspaces, and agent prompts safely', async () => {
+  it('keeps integrated media in the Hub and launches external services safely', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
     await renderApp();
 
     await click(buttonContaining('Entertainment'));
     await click(buttonContaining('YouTube'));
-    expect(open).toHaveBeenCalledWith('https://www.youtube.com', '_blank', 'noopener,noreferrer');
-    expect(container.textContent).toContain('YouTube opened');
+    expect(container.querySelector<HTMLSelectElement>('[aria-label="Entertainment service"]')?.value).toBe('youtube');
+    expect(container.querySelector('[aria-label="YouTube player"]')).not.toBeNull();
+    expect(open).not.toHaveBeenCalled();
+
+    await click(buttonContaining('Netflix'));
+    expect(open).toHaveBeenCalledWith('https://www.netflix.com', '_blank', 'noopener,noreferrer');
+    expect(container.textContent).toContain('Netflix opened');
 
     await click(buttonContaining('Workspaces'));
     const studyWorkspace = Array.from(container.querySelectorAll('.workspace-card')).find((card) =>
@@ -255,6 +260,21 @@ describe('application shell', () => {
     await click(buttonContaining('Launch desk', studyAgent));
     expect(open).toHaveBeenCalledWith('https://chatgpt.com', '_blank', 'noopener,noreferrer');
     expect(container.textContent).toContain('Study partner is ready');
+  });
+
+  it('opens global Spotify and YouTube controls beside display status', async () => {
+    await renderApp();
+
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Open Spotify controls"]') ?? undefined);
+    expect(container.querySelector('[aria-label="Spotify controls"]')).not.toBeNull();
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Previous"]')).not.toBeNull();
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Play"]')).not.toBeNull();
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Next"]')).not.toBeNull();
+    expect(container.textContent).toContain('Windows volume');
+
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Open YouTube controls"]') ?? undefined);
+    expect(container.querySelector('[aria-label="YouTube controls"]')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('[aria-label="YouTube volume"]')).not.toBeNull();
   });
 
   it('applies appearance settings and operates the command palette', async () => {

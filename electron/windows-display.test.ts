@@ -19,3 +19,14 @@ describe('Windows display helper structure', () => {
     expect(source).toContain('Start-Sleep -Seconds $Seconds');
   });
 });
+
+describe('Windows media-key bridge', () => {
+  it('accepts only fixed media commands at the main-process boundary', async () => {
+    const source = await readFile(new URL('./main.cjs', import.meta.url), 'utf8');
+    expect(source).toContain("previous: 0xB1");
+    expect(source).toContain("next: 0xB0");
+    expect(source).toContain("'volume-up': 0xAF");
+    expect(source).toContain("'volume-down': 0xAE");
+    expect(source).toContain("!Object.hasOwn(MEDIA_VIRTUAL_KEYS, command)");
+  });
+});

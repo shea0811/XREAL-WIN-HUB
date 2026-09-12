@@ -194,6 +194,9 @@ const browserBridge: XrealHubBridge = {
   async identifyDisplays() {
     return true;
   },
+  async sendMediaKey() {
+    return false;
+  },
   onSystemSnapshot(callback) {
     browserSnapshotListeners.add(callback);
     return () => browserSnapshotListeners.delete(callback);

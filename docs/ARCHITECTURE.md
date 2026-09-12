@@ -32,6 +32,12 @@ The renderer edits a draft containing positions and primary-display state. Resol
 
 On Windows, `electron/windows-display.ps1` uses `EnumDisplayDevices`, `EnumDisplaySettings`, and `ChangeDisplaySettingsEx` to test and stage every position before a single batch apply. A detached watcher holds the original topology and restores it after 20 seconds unless the user confirms through the 15-second in-app prompt. The five-second margin allows rollback even if the renderer or main process exits during confirmation.
 
+### Embedded media
+
+`MediaProvider` keeps Spotify and YouTube controller state above page navigation. The Entertainment module remains mounted while hidden, so changing Hub sections does not destroy an active player. The renderer loads only Spotify's official Embed iFrame API and YouTube's official IFrame Player API, with both origins allowlisted in the Content Security Policy.
+
+YouTube transport and volume commands remain inside its player API. Spotify's credential-free embed directly supports play/pause but not previous, next, or volume. In the packaged Windows app those three controls use a narrow IPC method that accepts only `previous`, `next`, `volume-up`, or `volume-down` and emits the corresponding Windows media virtual key. Browser preview reports that native limitation instead of simulating success.
+
 ## Persistence
 
 The state schema is versioned with `schemaVersion: 2` and migrates v0.1 data. Electron stores `hub-state.json` beneath `app.getPath('userData')`; a temporary file is written and renamed to avoid partially written state. Browser previews use `localStorage` only as a development fallback.
@@ -40,7 +46,7 @@ Persisted data includes notebooks, sections, notes, notifications, workspace pro
 
 ## Design decisions
 
-- Streaming and account-based services open in the default browser for authentication and DRM compatibility.
+- Spotify and YouTube use official in-app embeds. DRM-heavy services such as Netflix continue to open in the default browser for compatibility.
 - Workspaces express launch intent (`focus`, `split`, or `theatre`) but v0.1 does not reposition arbitrary third-party windows.
 - Gesture IDs are stable domain events. Simulation and future native providers must emit the same IDs.
 - Browser preview behavior is intentionally degraded for native-only controls and communicates that boundary in the UI.

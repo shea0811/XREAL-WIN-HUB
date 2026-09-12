@@ -20,6 +20,7 @@ import { Agents } from './modules/Agents';
 import { Settings } from './modules/Settings';
 import { platform } from './services/platform';
 import { useHub } from './state/HubContext';
+import { MediaProvider } from './state/MediaContext';
 import type {
   GestureId,
   HubActionId,
@@ -35,6 +36,14 @@ interface ToastState {
 }
 
 export default function App() {
+  return (
+    <MediaProvider>
+      <AppShell />
+    </MediaProvider>
+  );
+}
+
+function AppShell() {
   const {
     state,
     hydrated,
@@ -284,7 +293,7 @@ export default function App() {
       case 'display-studio':
         return <DisplayStudio snapshot={snapshot} onToast={showToast} />;
       case 'entertainment':
-        return <Entertainment snapshot={snapshot} onToast={showToast} />;
+        return null;
       case 'notes':
         return <Notes onToast={showToast} />;
       case 'workspaces':
@@ -317,7 +326,12 @@ export default function App() {
           onToggleNotifications={toggleNotifications}
           onHelp={() => navigate('device')}
         />
-        <main className="content-scroll" tabIndex={-1}>{page}</main>
+        <main className="content-scroll" tabIndex={-1}>
+          <div hidden={activeSection !== 'entertainment'}>
+            <Entertainment snapshot={snapshot} onToast={showToast} />
+          </div>
+          {page}
+        </main>
       </div>
 
       <CommandPalette

@@ -29,6 +29,7 @@ const channels = Object.freeze({
   displayConfirm: 'display:confirm',
   displayRevert: 'display:revert',
   displayIdentify: 'display:identify',
+  mediaKey: 'media:key',
 });
 
 const SIMULATED_DISPLAY_ID = 'xreal-one-pro-simulated';
@@ -355,6 +356,37 @@ async function identifyDisplays() {
   return windows.length > 0;
 }
 
+const MEDIA_VIRTUAL_KEYS = Object.freeze({
+  previous: 0xB1,
+  next: 0xB0,
+  'volume-up': 0xAF,
+  'volume-down': 0xAE,
+});
+
+async function sendMediaKey(command) {
+  if (typeof command !== 'string' || !Object.hasOwn(MEDIA_VIRTUAL_KEYS, command)) return false;
+  const keyCode = MEDIA_VIRTUAL_KEYS[command];
+  if (process.platform !== 'win32') return false;
+  const definition = [
+    'using System;',
+    'using System.Runtime.InteropServices;',
+    'public static class HubMediaKey {',
+    '[DllImport("user32.dll")] static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);',
+    'public static void Tap(byte key) { keybd_event(key, 0, 0, UIntPtr.Zero); keybd_event(key, 0, 2, UIntPtr.Zero); }',
+    '}',
+  ].join(' ');
+  try {
+    await execFileAsync('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+      `Add-Type -TypeDefinition '${definition}'; [HubMediaKey]::Tap(${keyCode})`,
+    ], { windowsHide: true, timeout: 5000, maxBuffer: 64 * 1024 });
+    return true;
+  } catch (error) {
+    console.error('Unable to send Windows media key', error);
+    return false;
+  }
+}
+
 function sendSnapshot() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channels.snapshotChanged, getSnapshot());
@@ -474,6 +506,7 @@ function registerIpc() {
   ipcMain.handle(channels.displayConfirm, confirmDisplayLayout);
   ipcMain.handle(channels.displayRevert, revertDisplayLayout);
   ipcMain.handle(channels.displayIdentify, identifyDisplays);
+  ipcMain.handle(channels.mediaKey, (_event, command) => sendMediaKey(command));
 }
 
 async function createWindow() {

@@ -19,6 +19,7 @@ const channels = Object.freeze({
   displayConfirm: 'display:confirm',
   displayRevert: 'display:revert',
   displayIdentify: 'display:identify',
+  mediaKey: 'media:key',
 });
 
 contextBridge.exposeInMainWorld('xrealHub', {
@@ -39,6 +40,7 @@ contextBridge.exposeInMainWorld('xrealHub', {
   confirmDisplayLayout: () => ipcRenderer.invoke(channels.displayConfirm),
   revertDisplayLayout: () => ipcRenderer.invoke(channels.displayRevert),
   identifyDisplays: () => ipcRenderer.invoke(channels.displayIdentify),
+  sendMediaKey: (command) => ipcRenderer.invoke(channels.mediaKey, command),
   onSystemSnapshot: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on(channels.snapshotChanged, listener);
