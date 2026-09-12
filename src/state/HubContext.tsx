@@ -14,9 +14,12 @@ import type {
   ActivityItem,
   GestureId,
   HubActionId,
+  HubNotification,
   HubSettings,
   HubState,
   Note,
+  Notebook,
+  NoteSection,
   WorkspaceProfile,
 } from '../types';
 
@@ -25,8 +28,10 @@ interface HubContextValue {
   hydrated: boolean;
   selectedNoteId: string | null;
   setSelectedNoteId(id: string | null): void;
-  createNote(): Note;
-  updateNote(id: string, patch: Partial<Pick<Note, 'title' | 'body' | 'tags'>>): void;
+  createNote(sectionId?: string): Note;
+  createNotebook(name: string): Notebook;
+  createNoteSection(notebookId: string, name: string): NoteSection;
+  updateNote(id: string, patch: Partial<Pick<Note, 'title' | 'body' | 'tags' | 'sectionId' | 'notebookId'>>): void;
   deleteNote(id: string): void;
   updateSettings(patch: Partial<HubSettings>): void;
   updateGesture(id: GestureId, actionId: HubActionId): void;
@@ -34,6 +39,9 @@ interface HubContextValue {
   addWorkspace(profile: WorkspaceProfile): void;
   removeWorkspace(id: string): void;
   recordActivity(item: Omit<ActivityItem, 'id' | 'createdAt'>): void;
+  pushNotification(item: Pick<HubNotification, 'title' | 'detail' | 'tone'>): HubNotification;
+  markNotificationsRead(): void;
+  clearNotifications(): void;
 }
 
 const HubContext = createContext<HubContextValue | null>(null);
@@ -72,10 +80,15 @@ export function HubProvider({ children }: PropsWithChildren) {
     return () => window.clearTimeout(timeout);
   }, [state, hydrated]);
 
-  const createNote = useCallback(() => {
+  const createNote = useCallback((requestedSectionId?: string) => {
     const now = new Date().toISOString();
+    const current = latestState.current;
+    const section = current.noteSections.find((item) => item.id === requestedSectionId)
+      ?? current.noteSections[0];
     const note: Note = {
       id: uniqueId('note'),
+      notebookId: section?.notebookId ?? current.notebooks[0]?.id ?? 'personal-notebook',
+      sectionId: section?.id ?? 'quick-notes-section',
       title: 'Untitled note',
       body: '',
       tags: [],
@@ -87,8 +100,46 @@ export function HubProvider({ children }: PropsWithChildren) {
     return note;
   }, []);
 
+  const createNotebook = useCallback((name: string) => {
+    const now = new Date().toISOString();
+    const notebook: Notebook = {
+      id: uniqueId('notebook'),
+      name: name.trim() || 'Untitled notebook',
+      color: '#5ee5d5',
+      createdAt: now,
+    };
+    const section: NoteSection = {
+      id: uniqueId('section'),
+      notebookId: notebook.id,
+      name: 'Quick notes',
+      color: notebook.color,
+      createdAt: now,
+    };
+    setState((current) => ({
+      ...current,
+      notebooks: [...current.notebooks, notebook],
+      noteSections: [...current.noteSections, section],
+    }));
+    return notebook;
+  }, []);
+
+  const createNoteSection = useCallback((notebookId: string, name: string) => {
+    const section: NoteSection = {
+      id: uniqueId('section'),
+      notebookId,
+      name: name.trim() || 'New section',
+      color: '#9d8cff',
+      createdAt: new Date().toISOString(),
+    };
+    setState((current) => ({
+      ...current,
+      noteSections: [...current.noteSections, section],
+    }));
+    return section;
+  }, []);
+
   const updateNote = useCallback(
-    (id: string, patch: Partial<Pick<Note, 'title' | 'body' | 'tags'>>) => {
+    (id: string, patch: Partial<Pick<Note, 'title' | 'body' | 'tags' | 'sectionId' | 'notebookId'>>) => {
       setState((current) => ({
         ...current,
         notes: current.notes.map((note) =>
@@ -167,6 +218,34 @@ export function HubProvider({ children }: PropsWithChildren) {
     [],
   );
 
+  const pushNotification = useCallback(
+    (item: Pick<HubNotification, 'title' | 'detail' | 'tone'>) => {
+      const notification: HubNotification = {
+        ...item,
+        id: uniqueId('notification'),
+        createdAt: new Date().toISOString(),
+        read: false,
+      };
+      setState((current) => ({
+        ...current,
+        notifications: [notification, ...current.notifications].slice(0, 50),
+      }));
+      return notification;
+    },
+    [],
+  );
+
+  const markNotificationsRead = useCallback(() => {
+    setState((current) => ({
+      ...current,
+      notifications: current.notifications.map((item) => ({ ...item, read: true })),
+    }));
+  }, []);
+
+  const clearNotifications = useCallback(() => {
+    setState((current) => ({ ...current, notifications: [] }));
+  }, []);
+
   const value = useMemo<HubContextValue>(
     () => ({
       state,
@@ -174,6 +253,8 @@ export function HubProvider({ children }: PropsWithChildren) {
       selectedNoteId,
       setSelectedNoteId,
       createNote,
+      createNotebook,
+      createNoteSection,
       updateNote,
       deleteNote,
       updateSettings,
@@ -182,12 +263,17 @@ export function HubProvider({ children }: PropsWithChildren) {
       addWorkspace,
       removeWorkspace,
       recordActivity,
+      pushNotification,
+      markNotificationsRead,
+      clearNotifications,
     }),
     [
       state,
       hydrated,
       selectedNoteId,
       createNote,
+      createNotebook,
+      createNoteSection,
       updateNote,
       deleteNote,
       updateSettings,
@@ -196,6 +282,9 @@ export function HubProvider({ children }: PropsWithChildren) {
       addWorkspace,
       removeWorkspace,
       recordActivity,
+      pushNotification,
+      markNotificationsRead,
+      clearNotifications,
     ],
   );
 

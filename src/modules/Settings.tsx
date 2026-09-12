@@ -1,21 +1,28 @@
 import {
   AppWindow,
+  Clock3,
   Contrast,
   Database,
   Eye,
+  Glasses,
   Gauge,
   HardDrive,
   Laptop,
+  Hand,
   Monitor,
   Moon,
   Play,
+  NotebookPen,
+  PanelsTopLeft,
   ShieldCheck,
   Sun,
+  Sparkles,
 } from 'lucide-react';
 import { SectionHeading, StatusPill, Toggle } from '../components/ui';
 import { platform } from '../services/platform';
 import { useHub } from '../state/HubContext';
 import type { SystemSnapshot, ThemeMode } from '../types';
+import { relativeTime } from '../lib/format';
 
 export function Settings({
   snapshot,
@@ -174,6 +181,32 @@ export function Settings({
           <div className="diagnostics-block">
             <div><strong>Build diagnostics</strong><StatusPill tone="neutral">v{snapshot?.appVersion ?? '0.1.0'}</StatusPill></div>
             <code>{snapshot?.isElectron ? 'Electron desktop' : 'Browser preview'} · {snapshot?.platform ?? 'Loading'} · {snapshot?.displays.length ?? 0} display(s)</code>
+          </div>
+        </section>
+
+        <section className="settings-group settings-group--wide card-surface activity-settings">
+          <header>
+            <span className="settings-group__icon"><Clock3 size={20} /></span>
+            <div><h2>Recent activity</h2><p>Local history for troubleshooting and reviewing Hub actions.</p></div>
+            <span className="local-badge">Local only</span>
+          </header>
+          <div className="activity-list">
+            {state.activity.map((item) => (
+              <div className="activity-row" key={item.id}>
+                <span className={`activity-row__icon activity-row__icon--${item.kind}`}>
+                  {item.kind === 'note' ? <NotebookPen size={16} />
+                    : item.kind === 'gesture' ? <Hand size={16} />
+                      : item.kind === 'workspace' ? <PanelsTopLeft size={16} />
+                        : item.kind === 'device' ? <Glasses size={16} />
+                          : <Sparkles size={16} />}
+                </span>
+                <span className="activity-row__copy">
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}</small>
+                </span>
+                <time>{relativeTime(item.createdAt)}</time>
+              </div>
+            ))}
           </div>
         </section>
       </div>

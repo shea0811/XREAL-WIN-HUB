@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useHub } from '../state/HubContext';
 import type { HubSection, SystemSnapshot } from '../types';
-import { formatDuration, relativeTime } from '../lib/format';
+import { formatDuration } from '../lib/format';
 import { Button, SectionHeading, StatusPill } from '../components/ui';
 
 const FOCUS_SECONDS = 25 * 60;
@@ -218,39 +218,6 @@ export function Dashboard({
         </div>
       </section>
 
-      <section className="dashboard-section activity-section">
-        <div className="section-row-heading">
-          <div>
-            <span className="eyebrow">On this device</span>
-            <h2>Recent activity</h2>
-          </div>
-          <span className="local-badge">Local only</span>
-        </div>
-        <div className="activity-list">
-          {state.activity.slice(0, 4).map((item) => (
-            <div className="activity-row" key={item.id}>
-              <span className={`activity-row__icon activity-row__icon--${item.kind}`}>
-                {item.kind === 'note' ? (
-                  <NotebookPen size={16} />
-                ) : item.kind === 'gesture' ? (
-                  <Hand size={16} />
-                ) : item.kind === 'workspace' ? (
-                  <PanelsTopLeft size={16} />
-                ) : item.kind === 'device' ? (
-                  <Glasses size={16} />
-                ) : (
-                  <Sparkles size={16} />
-                )}
-              </span>
-              <span className="activity-row__copy">
-                <strong>{item.title}</strong>
-                <small>{item.detail}</small>
-              </span>
-              <time>{relativeTime(item.createdAt)}</time>
-            </div>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

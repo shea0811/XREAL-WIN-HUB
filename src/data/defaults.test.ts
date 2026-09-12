@@ -9,9 +9,11 @@ describe('createDefaultState', () => {
     const second = createDefaultState(NOW);
     first.gestures[0].enabled = false;
     first.workspaces[0].targets[0].name = 'Changed';
+    first.notebooks[0].name = 'Changed';
 
     expect(second.gestures[0].enabled).toBe(true);
     expect(second.workspaces[0].targets[0].name).toBe('ChatGPT');
+    expect(second.notebooks[0].name).toBe('My notebook');
   });
 });
 
@@ -37,6 +39,30 @@ describe('normaliseState', () => {
     expect(state.settings).toEqual({ ...DEFAULT_SETTINGS, theme: 'light' });
     expect(state.gestures).toHaveLength(6);
     expect(state.gestures[0]).toMatchObject({ id: 'pinch', actionId: 'none', enabled: true });
+    expect(state.schemaVersion).toBe(2);
+    expect(state.notebooks[0].name).toBe('My notebook');
+  });
+
+  it('migrates v1 notes into the default notebook without losing content', () => {
+    const state = normaliseState(
+      {
+        schemaVersion: 1,
+        notes: [{ id: 'old-note', title: 'Existing note', body: 'Keep me', tags: ['saved'] }],
+        workspaces: [],
+        activity: [],
+        settings: {},
+        gestures: [],
+      },
+      NOW,
+    );
+
+    expect(state.notes[0]).toMatchObject({
+      id: 'old-note',
+      title: 'Existing note',
+      body: 'Keep me',
+      notebookId: 'personal-notebook',
+      sectionId: 'quick-notes-section',
+    });
   });
 
   it('recovers safely from malformed local collections', () => {

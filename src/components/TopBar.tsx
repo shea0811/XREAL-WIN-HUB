@@ -1,4 +1,4 @@
-import { CircleHelp, Command, Search } from 'lucide-react';
+import { Bell, CircleHelp, Command, Search } from 'lucide-react';
 import { getNavigationItem } from '../navigation';
 import type { HubSection, SystemSnapshot } from '../types';
 
@@ -7,12 +7,18 @@ export function TopBar({
   snapshot,
   preferredDisplayId,
   onOpenPalette,
+  unreadNotifications,
+  notificationCenterOpen,
+  onToggleNotifications,
   onHelp,
 }: {
   section: HubSection;
   snapshot: SystemSnapshot | null;
   preferredDisplayId: string | null;
   onOpenPalette(): void;
+  unreadNotifications: number;
+  notificationCenterOpen: boolean;
+  onToggleNotifications(): void;
   onHelp(): void;
 }) {
   const item = getNavigationItem(section);
@@ -42,6 +48,15 @@ export function TopBar({
           <span aria-hidden />
           {snapshot?.xreal.simulated ? 'One Pro simulated' : connected ? 'Display ready' : 'No XREAL display'}
         </span>
+        <button
+          className="icon-button notification-button"
+          data-active={notificationCenterOpen}
+          onClick={onToggleNotifications}
+          aria-label={`Open notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ''}`}
+        >
+          <Bell size={18} />
+          {unreadNotifications ? <span>{Math.min(unreadNotifications, 9)}</span> : null}
+        </button>
         <button className="icon-button" onClick={onHelp} aria-label="Open setup help">
           <CircleHelp size={19} />
         </button>

@@ -31,11 +31,37 @@ export type HubActionId =
 
 export interface Note {
   id: string;
+  notebookId: string;
+  sectionId: string;
   title: string;
   body: string;
   tags: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Notebook {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
+export interface NoteSection {
+  id: string;
+  notebookId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
+export interface HubNotification {
+  id: string;
+  title: string;
+  detail?: string;
+  tone: 'success' | 'info';
+  createdAt: string;
+  read: boolean;
 }
 
 export interface LaunchTarget {
@@ -83,8 +109,11 @@ export interface ActivityItem {
 }
 
 export interface HubState {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  notebooks: Notebook[];
+  noteSections: NoteSection[];
   notes: Note[];
+  notifications: HubNotification[];
   workspaces: WorkspaceProfile[];
   gestures: GestureMapping[];
   settings: HubSettings;

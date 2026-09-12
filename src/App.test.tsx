@@ -124,7 +124,7 @@ describe('application shell', () => {
   it('creates, edits, and searches a local note', async () => {
     await renderApp();
     await click(buttonContaining('Notes & study'));
-    await click(buttonContaining('New note'));
+    await click(buttonContaining('New page'));
 
     const titleInput = container.querySelector<HTMLInputElement>('[aria-label="Note title"]');
     const bodyInput = container.querySelector<HTMLTextAreaElement>('[aria-label="Note body"]');
@@ -152,6 +152,24 @@ describe('application shell', () => {
       await Promise.resolve();
     });
     expect(container.querySelectorAll('.note-list-item')).toHaveLength(1);
+  });
+
+  it('stores alerts in the notification centre and moves activity into Settings', async () => {
+    await renderApp();
+    expect(container.textContent).not.toContain('Recent activity');
+
+    await click(buttonContaining('XREAL device'));
+    await click(buttonContaining('Simulate One Pro'));
+
+    const notificationButton = container.querySelector<HTMLButtonElement>('[aria-label^="Open notifications"]');
+    await click(notificationButton ?? undefined);
+    expect(container.querySelector('[aria-label="Notification centre"]')).not.toBeNull();
+    expect(container.textContent).toContain('Simulated One Pro connected');
+
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Close notifications"]') ?? undefined);
+    await click(buttonContaining('Settings'));
+    expect(container.textContent).toContain('Recent activity');
+    expect(container.textContent).toContain('One Pro simulator connected');
   });
 
   it('launches entertainment, workspaces, and agent prompts safely', async () => {

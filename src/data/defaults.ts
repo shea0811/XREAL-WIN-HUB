@@ -4,7 +4,10 @@ import type {
   HubActionId,
   HubSettings,
   HubState,
+  HubNotification,
   Note,
+  Notebook,
+  NoteSection,
   ThemeMode,
   WorkspaceLayout,
   WorkspaceProfile,
@@ -139,6 +142,8 @@ export const DEFAULT_WORKSPACES: WorkspaceProfile[] = [
 function welcomeNote(now: string): Note {
   return {
     id: 'welcome-note',
+    notebookId: 'personal-notebook',
+    sectionId: 'quick-notes-section',
     title: 'Welcome to XREAL WIN HUB',
     body: [
       'This is your local command centre for XREAL-assisted work and entertainment.',
@@ -158,8 +163,33 @@ function welcomeNote(now: string): Note {
 export function createDefaultState(date = new Date()): HubState {
   const now = date.toISOString();
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    notebooks: [
+      {
+        id: 'personal-notebook',
+        name: 'My notebook',
+        color: '#5ee5d5',
+        createdAt: now,
+      },
+    ],
+    noteSections: [
+      {
+        id: 'quick-notes-section',
+        notebookId: 'personal-notebook',
+        name: 'Quick notes',
+        color: '#5ee5d5',
+        createdAt: now,
+      },
+      {
+        id: 'study-section',
+        notebookId: 'personal-notebook',
+        name: 'Study',
+        color: '#9d8cff',
+        createdAt: now,
+      },
+    ],
     notes: [welcomeNote(now)],
+    notifications: [],
     workspaces: structuredClone(DEFAULT_WORKSPACES),
     gestures: structuredClone(DEFAULT_GESTURES),
     settings: { ...DEFAULT_SETTINGS },
@@ -202,13 +232,60 @@ function asDate(value: unknown, fallback: string) {
     : fallback;
 }
 
-function normaliseNotes(value: unknown, fallback: Note[], now: string): Note[] {
+function normaliseNotebooks(value: unknown, fallback: Notebook[], now: string): Notebook[] {
+  if (!Array.isArray(value)) return fallback;
+  const notebooks = value.flatMap((item, index): Notebook[] => {
+    if (!isRecord(item)) return [];
+    return [{
+      id: asText(item.id, `recovered-notebook-${index}`),
+      name: asText(item.name, 'Recovered notebook'),
+      color: /^#[0-9a-f]{6}$/i.test(asText(item.color)) ? asText(item.color) : '#5ee5d5',
+      createdAt: asDate(item.createdAt, now),
+    }];
+  });
+  return notebooks.length ? notebooks : fallback;
+}
+
+function normaliseNoteSections(
+  value: unknown,
+  fallback: NoteSection[],
+  notebooks: Notebook[],
+  now: string,
+): NoteSection[] {
+  if (!Array.isArray(value)) return fallback;
+  const sections = value.flatMap((item, index): NoteSection[] => {
+    if (!isRecord(item)) return [];
+    const notebookId = asText(item.notebookId, notebooks[0]?.id);
+    if (!notebooks.some((notebook) => notebook.id === notebookId)) return [];
+    return [{
+      id: asText(item.id, `recovered-section-${index}`),
+      notebookId,
+      name: asText(item.name, 'Recovered section'),
+      color: /^#[0-9a-f]{6}$/i.test(asText(item.color)) ? asText(item.color) : '#5ee5d5',
+      createdAt: asDate(item.createdAt, now),
+    }];
+  });
+  return sections.length ? sections : fallback;
+}
+
+function normaliseNotes(
+  value: unknown,
+  fallback: Note[],
+  sections: NoteSection[],
+  now: string,
+): Note[] {
   if (!Array.isArray(value)) return fallback;
   return value.flatMap((item, index) => {
     if (!isRecord(item)) return [];
     const createdAt = asDate(item.createdAt, now);
     return [{
       id: asText(item.id, `recovered-note-${index}`),
+      notebookId: sections.find((section) => section.id === item.sectionId)?.notebookId
+        ?? sections[0]?.notebookId
+        ?? 'personal-notebook',
+      sectionId: sections.some((section) => section.id === item.sectionId)
+        ? asText(item.sectionId)
+        : sections[0]?.id ?? 'quick-notes-section',
       title: asText(item.title, 'Untitled note'),
       body: asText(item.body),
       tags: Array.isArray(item.tags)
@@ -218,6 +295,21 @@ function normaliseNotes(value: unknown, fallback: Note[], now: string): Note[] {
       updatedAt: asDate(item.updatedAt, createdAt),
     }];
   });
+}
+
+function normaliseNotifications(value: unknown, now: string): HubNotification[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index): HubNotification[] => {
+    if (!isRecord(item)) return [];
+    return [{
+      id: asText(item.id, `recovered-notification-${index}`),
+      title: asText(item.title, 'Notification'),
+      detail: typeof item.detail === 'string' ? item.detail : undefined,
+      tone: item.tone === 'info' ? 'info' : 'success',
+      createdAt: asDate(item.createdAt, now),
+      read: item.read === true,
+    }];
+  }).slice(0, 50);
 }
 
 function normaliseWorkspaces(
@@ -314,12 +406,22 @@ function normaliseActivity(value: unknown, fallback: ActivityItem[], now: string
 
 export function normaliseState(value: unknown, date = new Date()): HubState {
   const fallback = createDefaultState(date);
-  if (!isRecord(value) || value.schemaVersion !== 1) return fallback;
+  if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)) return fallback;
 
   const now = date.toISOString();
+  const notebooks = normaliseNotebooks(value.notebooks, fallback.notebooks, now);
+  const noteSections = normaliseNoteSections(
+    value.noteSections,
+    fallback.noteSections,
+    notebooks,
+    now,
+  );
   return {
-    schemaVersion: 1,
-    notes: normaliseNotes(value.notes, fallback.notes, now),
+    schemaVersion: 2,
+    notebooks,
+    noteSections,
+    notes: normaliseNotes(value.notes, fallback.notes, noteSections, now),
+    notifications: normaliseNotifications(value.notifications, now),
     workspaces: normaliseWorkspaces(value.workspaces, fallback.workspaces),
     gestures: normaliseGestures(value.gestures, fallback.gestures),
     settings: normaliseSettings(value.settings),

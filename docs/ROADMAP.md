@@ -8,15 +8,27 @@
 - Keyboard gesture simulator, simulated One Pro display, and focused AI prompt launchers.
 - Integration tests across every module plus GitHub build checks.
 
-## v0.2 — Windows-native refinement
+## v0.2 — daily-driver beta (in progress)
 
+- Five-second notification lifecycle, local Notification Centre, and particle-dissolve dismissal. ✅
+- OneNote-style notebook, section, and page organisation with v0.1 data migration. ✅
+- Move recent activity from Home to Settings and diagnostics. ✅
+- Add a safe visual editor for connected Windows/XREAL display topology.
+- Add an XREAL-targeted overlay and local Windows media-session listener.
+- Expand Entertainment into a hybrid embedded/app-launching hub.
+- Add capability-tested brightness and electrochromic controls without undocumented assumptions.
 - Persist and restore window geometry per display.
-- Optional Windows notifications and global hotkeys with clear permission controls.
 - Workspace target editing and richer layout orchestration.
 - Export/import of local data with schema validation.
 - Accessibility audit with keyboard and screen-reader test coverage.
 
-## v0.3 — supported device provider
+## v0.3 — spatial workspace
+
+- Add an FOV canvas with draggable Hub panels and saved layouts.
+- Prototype head-locked overlays only when an official Windows pose provider is available.
+- Evaluate a signed Windows Indirect Display Driver for arbitrary-app virtual monitors.
+
+## Supported device provider
 
 - Add a native adapter only when an official Windows-compatible XREAL path is available.
 - Provider health diagnostics, version reporting, reconnection, and permission state.

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CommandPalette } from './components/CommandPalette';
+import { NotificationCenter } from './components/NotificationCenter';
 import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { TopBar } from './components/TopBar';
@@ -29,6 +30,7 @@ interface ToastState {
   id: number;
   message: string;
   detail?: string;
+  tone: 'success' | 'info';
 }
 
 export default function App() {
@@ -38,6 +40,9 @@ export default function App() {
     createNote,
     recordActivity,
     updateSettings,
+    pushNotification,
+    markNotificationsRead,
+    clearNotifications,
   } = useHub();
   const [activeSection, setActiveSection] = useState<HubSection>('home');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -45,10 +50,20 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<SystemSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
 
   const showToast = useCallback((message: string, detail?: string) => {
-    setToast({ id: Date.now(), message, detail });
-  }, []);
+    const tone = detail?.toLowerCase().includes('unavailable') ? 'info' : 'success';
+    pushNotification({ title: message, detail, tone });
+    setToast({ id: Date.now(), message, detail, tone });
+  }, [pushNotification]);
+
+  const toggleNotifications = useCallback(() => {
+    setNotificationCenterOpen((open) => {
+      if (!open) markNotificationsRead();
+      return !open;
+    });
+  }, [markNotificationsRead]);
 
   useEffect(() => {
     let active = true;
@@ -292,6 +307,9 @@ export default function App() {
           snapshot={snapshot}
           preferredDisplayId={state.settings.preferredDisplayId}
           onOpenPalette={() => setPaletteOpen(true)}
+          unreadNotifications={state.notifications.filter((item) => !item.read).length}
+          notificationCenterOpen={notificationCenterOpen}
+          onToggleNotifications={toggleNotifications}
           onHelp={() => navigate('device')}
         />
         <main className="content-scroll" tabIndex={-1}>{page}</main>
@@ -307,10 +325,18 @@ export default function App() {
         onFocus={toggleFocus}
       />
 
+      <NotificationCenter
+        open={notificationCenterOpen}
+        notifications={state.notifications}
+        onClose={() => setNotificationCenterOpen(false)}
+        onMarkRead={markNotificationsRead}
+        onClear={clearNotifications}
+      />
+
       {toast ? (
         <Toast
           key={toast.id}
-          toast={{ id: toast.id, title: toast.message, detail: toast.detail }}
+          toast={{ id: toast.id, title: toast.message, detail: toast.detail, tone: toast.tone }}
           onDismiss={() => setToast(null)}
         />
       ) : null}
