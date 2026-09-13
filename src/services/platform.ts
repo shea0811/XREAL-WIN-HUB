@@ -214,7 +214,7 @@ const browserBridge: XrealHubBridge = {
       clientId: null,
       accountName: null,
       product: null,
-      redirectUri: 'http://127.0.0.1/callback',
+      redirectUri: 'http://127.0.0.1:8888/callback',
       message: 'Spotify Premium sign-in is available in the installed Windows app.',
     };
   },
@@ -232,6 +232,12 @@ const browserBridge: XrealHubBridge = {
   },
   async controlSpotify() {
     return this.getSpotifyPlaybackStatus();
+  },
+  async getSpotifyCatalog(action, payload) {
+    const sample = [
+      { id: 'demo-1', uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M', type: 'playlist', name: 'Today’s Top Hits', subtitle: 'Spotify', imageUrl: null, durationMs: 0, explicit: false },
+    ];
+    return { sections: [{ id: action, title: payload?.query ? `Results for ${payload.query}` : 'Spotify preview', items: sample }] };
   },
   async clearLocalData() {
     localStorage.clear();

@@ -51,6 +51,7 @@ const channels = Object.freeze({
   spotifyPlay: 'spotify:play',
   spotifyPlaybackStatus: 'spotify:playback-status',
   spotifyControl: 'spotify:control',
+  spotifyCatalog: 'spotify:catalog',
   whatsappStatus: 'whatsapp:status',
   whatsappStatusChanged: 'whatsapp:status-changed',
   whatsappEmbedded: 'whatsapp:embedded',
@@ -73,10 +74,13 @@ let whatsappWindow = null;
 let whatsappEmbeddedRequested = false;
 let whatsappBounds = null;
 let whatsappState = 'idle';
+let whatsappSessionConfigured = false;
 const spotifyAuth = createSpotifyAuth({ app, safeStorage, shell });
 
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
 const WHATSAPP_PARTITION = 'persist:whatsapp';
+const CHROME_MAJOR = String(process.versions.chrome || '142.0.0.0').split('.')[0];
+const WHATSAPP_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome || '142.0.0.0'} Safari/537.36`;
 const WHATSAPP_PERMISSIONS = new Set(['media', 'notifications', 'clipboard-sanitized-write']);
 const grantedWhatsAppPermissions = new Set(['clipboard-sanitized-write']);
 const DISPLAY_HELPER_SHA256 = '49367428d9ae8f1746450b7d2a550ea88fc4886e4e2f88f44cf56596b3d997aa';
@@ -209,6 +213,9 @@ function publishWhatsAppStatus(message) {
 }
 
 function configureWhatsAppContents(contents) {
+  // WhatsApp rejects user agents containing Electron even when the bundled
+  // Chromium engine is newer than its minimum supported Chrome version.
+  contents.setUserAgent(WHATSAPP_USER_AGENT);
   contents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternalHttps(url)) void confirmAndOpenExternal(url);
     return { action: 'deny' };
@@ -241,6 +248,24 @@ function configureWhatsAppContents(contents) {
 
 function configureWhatsAppSession() {
   const isolatedSession = session.fromPartition(WHATSAPP_PARTITION, { cache: true });
+  isolatedSession.setUserAgent(WHATSAPP_USER_AGENT, 'en-GB,en;q=0.9');
+  if (!whatsappSessionConfigured) {
+    whatsappSessionConfigured = true;
+    isolatedSession.webRequest.onBeforeSendHeaders(
+      { urls: ['https://web.whatsapp.com/*', 'https://*.whatsapp.com/*'] },
+      (details, callback) => {
+        const headers = { ...details.requestHeaders };
+        for (const name of Object.keys(headers)) {
+          if (['user-agent', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform'].includes(name.toLowerCase())) delete headers[name];
+        }
+        headers['User-Agent'] = WHATSAPP_USER_AGENT;
+        headers['sec-ch-ua'] = `\"Chromium\";v=\"${CHROME_MAJOR}\", \"Google Chrome\";v=\"${CHROME_MAJOR}\", \"Not_A Brand\";v=\"99\"`;
+        headers['sec-ch-ua-mobile'] = '?0';
+        headers['sec-ch-ua-platform'] = '\"Windows\"';
+        callback({ requestHeaders: headers });
+      },
+    );
+  }
   isolatedSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
     isWhatsAppOrigin(requestingOrigin)
       && WHATSAPP_PERMISSIONS.has(permission)
@@ -915,6 +940,7 @@ function registerIpc() {
   registerTrustedHandler(channels.spotifyPlay, (source) => spotifyAuth.playSource(source));
   registerTrustedHandler(channels.spotifyPlaybackStatus, () => spotifyAuth.playbackStatus());
   registerTrustedHandler(channels.spotifyControl, (command, value) => spotifyAuth.control(command, value));
+  registerTrustedHandler(channels.spotifyCatalog, (action, payload) => spotifyAuth.catalog(action, payload));
   registerTrustedHandler(channels.whatsappStatus, () => whatsappStatus());
   registerTrustedHandler(channels.whatsappEmbedded, (visible, bounds) =>
     setWhatsAppEmbedded(visible, bounds),

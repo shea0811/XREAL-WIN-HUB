@@ -40,6 +40,8 @@ Reference: https://developer.spotify.com/documentation/web-api/concepts/redirect
 - WhatsApp detached-window content protection.
 - Cookie encryption and ASAR integrity enforcement through Electron fuses.
 - Disabled `ELECTRON_RUN_AS_NODE`, Node environment options and CLI debugging in packaged builds.
+- WhatsApp uses the actual Electron-bundled Chromium version in a Chrome-compatible user agent and client-hint headers. The override is scoped to the isolated WhatsApp partition and WhatsApp HTTPS origins; it does not weaken sandboxing or origin restrictions.
+- Spotify catalogue requests cross IPC only as four fixed actions (`home`, `search`, `library`, and `collection`). Search text is length-capped and URL-encoded, and collection identifiers must pass the existing Spotify URI allowlist.
 - Only the integrity-validated ASAR can provide application code in packaged builds.
 - Spotify Premium commands are allowlisted and volume values are bounded.
 - Display-helper contents must match the reviewed digest before PowerShell starts.

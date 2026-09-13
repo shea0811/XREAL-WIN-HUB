@@ -215,7 +215,35 @@ export interface SpotifyPlaybackStatus {
   detail: string;
   volume: number;
   artwork?: string;
+  positionMs?: number;
+  durationMs?: number;
+  shuffle?: boolean;
+  repeatMode?: 'off' | 'track' | 'context';
+  deviceName?: string | null;
   message?: string;
+}
+
+export interface SpotifyCatalogItem {
+  id: string;
+  uri: string;
+  type: string;
+  name: string;
+  subtitle: string;
+  imageUrl: string | null;
+  durationMs: number;
+  explicit: boolean;
+}
+
+export interface SpotifyCatalogSection {
+  id: string;
+  title: string;
+  items: SpotifyCatalogItem[];
+}
+
+export interface SpotifyCatalogResult {
+  sections?: SpotifyCatalogSection[];
+  header?: SpotifyCatalogItem | null;
+  items?: SpotifyCatalogItem[];
 }
 
 export interface WhatsAppStatus {
@@ -259,7 +287,8 @@ export interface XrealHubBridge {
   disconnectSpotify(): Promise<SpotifyAuthStatus>;
   playSpotifySource(source: string): Promise<boolean>;
   getSpotifyPlaybackStatus(): Promise<SpotifyPlaybackStatus>;
-  controlSpotify(command: 'previous' | 'toggle' | 'next' | 'volume', value?: number): Promise<SpotifyPlaybackStatus>;
+  controlSpotify(command: 'previous' | 'toggle' | 'next' | 'volume' | 'seek' | 'shuffle' | 'repeat', value?: number | boolean | string): Promise<SpotifyPlaybackStatus>;
+  getSpotifyCatalog(action: 'home' | 'search' | 'library' | 'collection', payload?: { query?: string; uri?: string }): Promise<SpotifyCatalogResult>;
   clearLocalData(): Promise<boolean>;
   getWhatsAppStatus(): Promise<WhatsAppStatus>;
   setWhatsAppEmbedded(visible: boolean, bounds?: EmbeddedViewBounds): Promise<WhatsAppStatus>;

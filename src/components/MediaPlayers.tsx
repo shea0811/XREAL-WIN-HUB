@@ -139,6 +139,10 @@ export function SpotifyPremiumPlayer({
         volume: state.volume,
         volumeMode: 'player',
         artwork: state.artwork,
+        positionMs: state.positionMs,
+        durationMs: state.durationMs,
+        shuffle: state.shuffle,
+        repeatMode: state.repeatMode,
         message: state.message,
       });
     };

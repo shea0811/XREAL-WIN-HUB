@@ -9,6 +9,7 @@ import {
   YouTubePlayer,
 } from '../components/MediaPlayers';
 import { Button, SectionHeading, StatusPill } from '../components/ui';
+import { SpotifyHub } from '../components/SpotifyHub';
 import { platform } from '../services/platform';
 import { useMedia } from '../state/MediaContext';
 import type { SpotifyAuthStatus } from '../types';
@@ -136,10 +137,13 @@ export function MediaServicePage({
       ) : null}
 
       {isSpotify && premiumConnected ? (
-        <div className="spotify-account-row">
-          <span><ShieldCheck size={15} /> {authStatus?.accountName ?? 'Spotify account'} · {authStatus?.product ?? 'Premium'}</span>
-          <Button variant="ghost" onClick={() => void disconnectSpotify()}><LogOut size={15} /> Disconnect</Button>
-        </div>
+        <>
+          <div className="spotify-account-row">
+            <span><ShieldCheck size={15} /> {authStatus?.accountName ?? 'Spotify account'} · {authStatus?.product ?? 'Premium'}</span>
+            <Button variant="ghost" onClick={() => void disconnectSpotify()}><LogOut size={15} /> Disconnect</Button>
+          </div>
+          <SpotifyHub onToast={onToast} />
+        </>
       ) : null}
 
       <section className="media-now-playing card-surface">

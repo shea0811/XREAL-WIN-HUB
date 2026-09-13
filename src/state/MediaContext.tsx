@@ -19,6 +19,10 @@ export interface MediaStatus {
   volume: number;
   volumeMode: 'player' | 'system';
   artwork?: string;
+  positionMs?: number;
+  durationMs?: number;
+  shuffle?: boolean;
+  repeatMode?: 'off' | 'track' | 'context';
   active: boolean;
   message?: string;
 }

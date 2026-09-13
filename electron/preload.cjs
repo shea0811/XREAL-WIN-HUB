@@ -27,6 +27,7 @@ const channels = Object.freeze({
   spotifyPlay: 'spotify:play',
   spotifyPlaybackStatus: 'spotify:playback-status',
   spotifyControl: 'spotify:control',
+  spotifyCatalog: 'spotify:catalog',
   whatsappStatus: 'whatsapp:status',
   whatsappStatusChanged: 'whatsapp:status-changed',
   whatsappEmbedded: 'whatsapp:embedded',
@@ -63,6 +64,7 @@ contextBridge.exposeInMainWorld('xrealHub', {
   playSpotifySource: (source) => ipcRenderer.invoke(channels.spotifyPlay, source),
   getSpotifyPlaybackStatus: () => ipcRenderer.invoke(channels.spotifyPlaybackStatus),
   controlSpotify: (command, value) => ipcRenderer.invoke(channels.spotifyControl, command, value),
+  getSpotifyCatalog: (action, payload) => ipcRenderer.invoke(channels.spotifyCatalog, action, payload),
   getWhatsAppStatus: () => ipcRenderer.invoke(channels.whatsappStatus),
   setWhatsAppEmbedded: (visible, bounds) =>
     ipcRenderer.invoke(channels.whatsappEmbedded, visible, bounds),

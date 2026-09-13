@@ -45,4 +45,21 @@ describe('security invariants', () => {
       onlyLoadAppFromAsar: true,
     });
   });
+
+  it('presents WhatsApp with the bundled supported Chromium identity', async () => {
+    const main = await source('electron/main.cjs');
+    expect(main).toContain('const WHATSAPP_USER_AGENT');
+    expect(main).toContain('contents.setUserAgent(WHATSAPP_USER_AGENT)');
+    expect(main).toContain("headers['sec-ch-ua']");
+    expect(main).toContain("{ urls: ['https://web.whatsapp.com/*', 'https://*.whatsapp.com/*'] }");
+    expect(main).not.toContain('Chrome/100.0.0.0');
+  });
+
+  it('keeps Spotify catalogue access behind fixed allowlisted actions', async () => {
+    const auth = await source('electron/spotify-auth.cjs');
+    const preload = await source('electron/preload.cjs');
+    expect(auth).toContain("['home', 'search', 'library', 'collection'].includes(action)");
+    expect(auth).toContain("payload.query.trim().slice(0, 100)");
+    expect(preload).toContain('getSpotifyCatalog: (action, payload)');
+  });
 });

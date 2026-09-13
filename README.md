@@ -10,7 +10,9 @@ A local-first Windows command centre for XREAL displays. It brings display place
 - **XREAL device centre** — Windows display discovery, preferred-display selection, window placement, and theatre mode.
 - **Display Layout Studio** — draggable physical/XREAL topology, screen identification, primary-display selection, edge snapping, guarded Windows apply, and automatic rollback.
 - **One Pro simulator** — deterministic 1920×1080 virtual-device mode for testing connection-dependent flows without hardware.
-- **Entertainment hub** — dedicated, persistent Spotify and YouTube pages, saved media links, now-playing artwork, top-bar transport/volume controls, and secure browser launchers for DRM-only services.
+- **Entertainment hub** — dedicated Spotify and YouTube pages, saved media links, now-playing artwork, top-bar transport/volume controls, and secure browser launchers for DRM-only services.
+- **Spotify Hub** — Premium-powered Home, Search, Library, playlists/albums/artists/podcasts, collection drill-down, and a persistent player with seek, shuffle, repeat and volume controls.
+- **WhatsApp workspace** — isolated linked-device session with an up-to-date Chromium identity, detachable privacy-protected window, permission prompts, and emergency privacy hide.
 - **Spotify Premium** — optional desktop PKCE sign-in for direct previous/play/next, an exact volume slider, and playback through the Hub; the credential-free embed remains available as a fallback.
 - **Notes & study** — searchable, autosaved notebooks organised into sections and pages with lightweight tags.
 - **Workspaces** — built-in study, cyber lab, entertainment, and service-desk launch profiles plus custom launchers.

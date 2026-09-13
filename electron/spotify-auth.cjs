@@ -13,6 +13,13 @@ const SPOTIFY_SCOPES = [
   'user-read-private',
   'user-read-playback-state',
   'user-modify-playback-state',
+  'user-library-read',
+  'user-library-modify',
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'user-top-read',
+  'user-read-recently-played',
+  'user-follow-read',
 ].join(' ');
 
 function spotifyUriFromSource(value) {
@@ -264,7 +271,7 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
     });
     if (!response.ok && response.status !== 204) {
       const body = await response.text();
-      throw new Error(`Spotify playback request failed (${response.status}): ${body.slice(0, 180)}`);
+      throw new Error(`Spotify API request failed (${response.status}): ${body.slice(0, 180)}`);
     }
     if (response.status === 204) return null;
     const contentType = response.headers.get('content-type') || '';
@@ -295,12 +302,17 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
         : (state?.device?.name || 'No active Spotify device'),
       volume: Number.isFinite(state?.device?.volume_percent) ? state.device.volume_percent : 50,
       artwork: item?.album?.images?.[0]?.url,
+      positionMs: Number.isFinite(state?.progress_ms) ? state.progress_ms : 0,
+      durationMs: Number.isFinite(item?.duration_ms) ? item.duration_ms : 0,
+      shuffle: Boolean(state?.shuffle_state),
+      repeatMode: ['off', 'track', 'context'].includes(state?.repeat_state) ? state.repeat_state : 'off',
+      deviceName: state?.device?.name || null,
       ...(message ? { message } : {}),
     };
   }
 
   async function control(command, value) {
-    if (!['previous', 'toggle', 'next', 'volume'].includes(command)) {
+    if (!['previous', 'toggle', 'next', 'volume', 'seek', 'shuffle', 'repeat'].includes(command)) {
       throw new TypeError('Unsupported Spotify command.');
     }
     const current = await playbackStatus();
@@ -309,16 +321,126 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
       await spotifyRequest(`/me/player/${command}`, { method: 'POST' });
     } else if (command === 'toggle') {
       await spotifyRequest(`/me/player/${current.playing ? 'pause' : 'play'}`, { method: 'PUT' });
-    } else {
+    } else if (command === 'volume') {
       const volume = Math.max(0, Math.min(100, Math.round(Number(value))));
       if (!Number.isFinite(volume)) throw new TypeError('Spotify volume must be a number.');
       await spotifyRequest(`/me/player/volume?volume_percent=${volume}`, { method: 'PUT' });
+    } else if (command === 'seek') {
+      const position = Math.max(0, Math.min(current.durationMs || 86_400_000, Math.round(Number(value))));
+      if (!Number.isFinite(position)) throw new TypeError('Spotify seek position must be a number.');
+      await spotifyRequest(`/me/player/seek?position_ms=${position}`, { method: 'PUT' });
+    } else if (command === 'shuffle') {
+      await spotifyRequest(`/me/player/shuffle?state=${Boolean(value)}`, { method: 'PUT' });
+    } else {
+      const state = ['off', 'track', 'context'].includes(value) ? value : 'off';
+      await spotifyRequest(`/me/player/repeat?state=${state}`, { method: 'PUT' });
     }
     await new Promise((resolve) => setTimeout(resolve, 120));
     return playbackStatus();
   }
 
-  return { getStatus, connect, disconnect, accessToken, playSource, playbackStatus, control };
+  function normaliseItem(value) {
+    const item = value?.track ?? value?.album ?? value?.item ?? value;
+    if (!item || typeof item !== 'object' || typeof item.name !== 'string') return null;
+    const artists = Array.isArray(item.artists)
+      ? item.artists.map((artist) => artist?.name).filter(Boolean).join(', ')
+      : '';
+    const subtitle = artists || item.owner?.display_name || item.publisher || item.type || '';
+    const images = Array.isArray(item.images)
+      ? item.images
+      : Array.isArray(item.album?.images) ? item.album.images : [];
+    return {
+      id: typeof item.id === 'string' ? item.id : '',
+      uri: typeof item.uri === 'string' ? item.uri : '',
+      type: typeof item.type === 'string' ? item.type : 'track',
+      name: item.name,
+      subtitle,
+      imageUrl: images.find((image) => typeof image?.url === 'string')?.url || null,
+      durationMs: Number.isFinite(item.duration_ms) ? item.duration_ms : 0,
+      explicit: Boolean(item.explicit),
+    };
+  }
+
+  function normaliseItems(values) {
+    return (Array.isArray(values) ? values : []).map(normaliseItem).filter(Boolean);
+  }
+
+  async function optionalRequest(endpoint) {
+    try {
+      return await spotifyRequest(endpoint);
+    } catch (error) {
+      console.warn('Optional Spotify shelf unavailable', endpoint, error?.message);
+      return null;
+    }
+  }
+
+  async function catalog(action, payload = {}) {
+    if (!['home', 'search', 'library', 'collection'].includes(action)) {
+      throw new TypeError('Unsupported Spotify catalogue action.');
+    }
+    if (action === 'home') {
+      const [recent, top, playlists, albums] = await Promise.all([
+        optionalRequest('/me/player/recently-played?limit=12'),
+        optionalRequest('/me/top/tracks?limit=12&time_range=short_term'),
+        optionalRequest('/me/playlists?limit=12'),
+        optionalRequest('/me/albums?limit=12'),
+      ]);
+      return { sections: [
+        { id: 'recent', title: 'Recently played', items: normaliseItems(recent?.items) },
+        { id: 'top', title: 'Made from your listening', items: normaliseItems(top?.items) },
+        { id: 'playlists', title: 'Your playlists', items: normaliseItems(playlists?.items) },
+        { id: 'albums', title: 'Saved albums', items: normaliseItems(albums?.items) },
+      ].filter((section) => section.items.length) };
+    }
+    if (action === 'library') {
+      const [tracks, albums, playlists, artists] = await Promise.all([
+        optionalRequest('/me/tracks?limit=24'),
+        optionalRequest('/me/albums?limit=18'),
+        optionalRequest('/me/playlists?limit=24'),
+        optionalRequest('/me/following?type=artist&limit=18'),
+      ]);
+      return { sections: [
+        { id: 'liked', title: 'Liked songs', items: normaliseItems(tracks?.items) },
+        { id: 'albums', title: 'Albums', items: normaliseItems(albums?.items) },
+        { id: 'playlists', title: 'Playlists', items: normaliseItems(playlists?.items) },
+        { id: 'artists', title: 'Followed artists', items: normaliseItems(artists?.artists?.items) },
+      ].filter((section) => section.items.length) };
+    }
+    if (action === 'search') {
+      const query = typeof payload.query === 'string' ? payload.query.trim().slice(0, 100) : '';
+      if (!query) return { sections: [] };
+      const result = await spotifyRequest(`/search?q=${encodeURIComponent(query)}&type=track,album,artist,playlist,show&limit=12`);
+      const definitions = [
+        ['tracks', 'Songs'], ['artists', 'Artists'], ['albums', 'Albums'],
+        ['playlists', 'Playlists'], ['shows', 'Podcasts'],
+      ];
+      return { sections: definitions.map(([key, title]) => ({
+        id: key,
+        title,
+        items: normaliseItems(result?.[key]?.items),
+      })).filter((section) => section.items.length) };
+    }
+
+    const uri = spotifyUriFromSource(payload.uri);
+    if (!uri) throw new TypeError('Unsupported Spotify collection.');
+    const [, type, id] = uri.split(':');
+    let detail;
+    let children = [];
+    if (type === 'artist') {
+      const [artist, tracks] = await Promise.all([
+        spotifyRequest(`/artists/${id}`),
+        spotifyRequest(`/artists/${id}/top-tracks`),
+      ]);
+      detail = artist;
+      children = tracks?.tracks;
+    } else {
+      detail = await spotifyRequest(`/${type}s/${id}`);
+      children = detail?.tracks?.items ?? detail?.items?.items ?? detail?.episodes?.items ?? [];
+    }
+    return { header: normaliseItem(detail), items: normaliseItems(children) };
+  }
+
+  return { getStatus, connect, disconnect, accessToken, playSource, playbackStatus, control, catalog };
 }
 
 module.exports = { createSpotifyAuth, spotifyUriFromSource, REDIRECT_REGISTRATION };

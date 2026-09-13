@@ -35,4 +35,12 @@ describe('Spotify desktop authorization helpers', () => {
     expect(spotifyUriFromSource('javascript:alert(1)')).toBeNull();
     expect(spotifyUriFromSource(null)).toBeNull();
   });
+
+  it('requests only user-facing catalogue and playback permissions', async () => {
+    const source = await readFile(new URL('../electron/spotify-auth.cjs', import.meta.url), 'utf8');
+    expect(source).toContain("'user-library-read'");
+    expect(source).toContain("'playlist-read-private'");
+    expect(source).toContain("'user-top-read'");
+    expect(source).not.toContain('client_secret');
+  });
 });
