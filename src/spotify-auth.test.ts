@@ -5,10 +5,12 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   REDIRECT_REGISTRATION,
+  chooseSpotifyDevice,
   spotifyUriFromSource,
 }: {
   REDIRECT_REGISTRATION: string;
   spotifyUriFromSource(value: unknown): string | null;
+  chooseSpotifyDevice(items: Array<{ id: string; type: string; active: boolean; restricted: boolean }>, preferred?: string): { id: string } | null;
 } = require('../electron/spotify-auth.cjs');
 
 describe('Spotify desktop authorization helpers', () => {
@@ -42,5 +44,24 @@ describe('Spotify desktop authorization helpers', () => {
     expect(source).toContain("'playlist-read-private'");
     expect(source).toContain("'user-top-read'");
     expect(source).not.toContain('client_secret');
+  });
+
+  it('chooses an active, preferred, or desktop Spotify Connect device safely', () => {
+    const devices = [
+      { id: 'phone', type: 'Smartphone', active: false, restricted: false },
+      { id: 'pc', type: 'Computer', active: false, restricted: false },
+    ];
+    expect(chooseSpotifyDevice(devices, 'phone')?.id).toBe('phone');
+    expect(chooseSpotifyDevice(devices)?.id).toBe('pc');
+    expect(chooseSpotifyDevice([{ ...devices[0], active: true }, devices[1]])?.id).toBe('phone');
+    expect(chooseSpotifyDevice([{ ...devices[0], restricted: true }])).toBeNull();
+  });
+
+  it('activates a Connect device and retries transient no-active-device playback', async () => {
+    const source = await readFile(new URL('../electron/spotify-auth.cjs', import.meta.url), 'utf8');
+    expect(source).toContain("spotifyRequest('/me/player/devices')");
+    expect(source).toContain('device_ids: [selected.id]');
+    expect(source).toContain("error?.reason !== 'NO_ACTIVE_DEVICE'");
+    expect(source).toContain('No Spotify Connect device is available.');
   });
 });

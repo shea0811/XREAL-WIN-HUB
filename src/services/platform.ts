@@ -230,6 +230,12 @@ const browserBridge: XrealHubBridge = {
   async getSpotifyPlaybackStatus() {
     return { available: false, playing: false, title: 'Spotify', detail: 'Not connected', volume: 50 };
   },
+  async getSpotifyDevices() {
+    return [];
+  },
+  async setSpotifyDevice() {
+    return this.getSpotifyPlaybackStatus();
+  },
   async controlSpotify() {
     return this.getSpotifyPlaybackStatus();
   },

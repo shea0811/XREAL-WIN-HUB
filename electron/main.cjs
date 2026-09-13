@@ -50,6 +50,8 @@ const channels = Object.freeze({
   spotifyDisconnect: 'spotify:disconnect',
   spotifyPlay: 'spotify:play',
   spotifyPlaybackStatus: 'spotify:playback-status',
+  spotifyDevices: 'spotify:devices',
+  spotifySelectDevice: 'spotify:select-device',
   spotifyControl: 'spotify:control',
   spotifyCatalog: 'spotify:catalog',
   whatsappStatus: 'whatsapp:status',
@@ -942,6 +944,8 @@ function registerIpc() {
   registerTrustedHandler(channels.spotifyDisconnect, () => spotifyAuth.disconnect());
   registerTrustedHandler(channels.spotifyPlay, (source) => spotifyAuth.playSource(source));
   registerTrustedHandler(channels.spotifyPlaybackStatus, () => spotifyAuth.playbackStatus());
+  registerTrustedHandler(channels.spotifyDevices, () => spotifyAuth.devices());
+  registerTrustedHandler(channels.spotifySelectDevice, (deviceId) => spotifyAuth.selectDevice(deviceId));
   registerTrustedHandler(channels.spotifyControl, (command, value) => spotifyAuth.control(command, value));
   registerTrustedHandler(channels.spotifyCatalog, (action, payload) => spotifyAuth.catalog(action, payload));
   registerTrustedHandler(channels.whatsappStatus, () => whatsappStatus());

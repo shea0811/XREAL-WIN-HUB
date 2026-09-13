@@ -23,6 +23,8 @@ export interface MediaStatus {
   durationMs?: number;
   shuffle?: boolean;
   repeatMode?: 'off' | 'track' | 'context';
+  deviceId?: string | null;
+  deviceName?: string | null;
   active: boolean;
   message?: string;
 }

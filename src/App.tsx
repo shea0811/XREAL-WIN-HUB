@@ -65,6 +65,7 @@ function AppShell() {
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
+  const [widePresentation, setWidePresentation] = useState(() => window.innerWidth / Math.max(1, window.innerHeight) >= 2);
 
   const showToast = useCallback((message: string, detail?: string) => {
     const tone = detail?.toLowerCase().includes('unavailable') ? 'info' : 'success';
@@ -94,6 +95,12 @@ function AppShell() {
       unsubscribe();
     };
   }, [showToast]);
+
+  useEffect(() => {
+    const updatePresentation = () => setWidePresentation(window.innerWidth / Math.max(1, window.innerHeight) >= 2);
+    window.addEventListener('resize', updatePresentation);
+    return () => window.removeEventListener('resize', updatePresentation);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -320,7 +327,7 @@ function AppShell() {
   })();
 
   return (
-    <div className="app-shell" data-ready={hydrated}>
+    <div className="app-shell" data-ready={hydrated} data-display-mode={widePresentation ? 'xreal-wide' : 'standard'}>
       <Sidebar
         activeSection={activeSection}
         collapsed={sidebarCollapsed}

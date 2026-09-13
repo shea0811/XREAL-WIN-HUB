@@ -46,6 +46,15 @@ function callbackPage(success, message) {
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${title}</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#070b12;color:#f3f7fb;font-family:Segoe UI,sans-serif}main{max-width:480px;padding:38px;text-align:center;background:#0d131e;border:1px solid #273344;border-radius:18px}h1{color:${accent}}p{color:#9ba9b8;line-height:1.55}</style><main><h1>${title}</h1><p>${safeMessage}</p><p>You can close this tab and return to XREAL WIN HUB.</p></main>`;
 }
 
+function chooseSpotifyDevice(items, preferredDeviceId) {
+  const usable = (Array.isArray(items) ? items : []).filter((device) => device && !device.restricted);
+  return usable.find((device) => device.active)
+    || usable.find((device) => device.id === preferredDeviceId)
+    || usable.find((device) => /computer|desktop/i.test(device.type))
+    || usable[0]
+    || null;
+}
+
 function createSpotifyAuth({ app, safeStorage, shell }) {
   let loaded = false;
   let record = null;
@@ -64,6 +73,7 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
         clientId: typeof saved.clientId === 'string' ? saved.clientId : null,
         accountName: typeof saved.accountName === 'string' ? saved.accountName : null,
         product: typeof saved.product === 'string' ? saved.product : null,
+        preferredDeviceId: typeof saved.preferredDeviceId === 'string' ? saved.preferredDeviceId : null,
         token: null,
       };
       if (saved.encryptedToken && safeStorage.isEncryptionAvailable()) {
@@ -80,6 +90,7 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
       clientId: record.clientId,
       accountName: record.accountName,
       product: record.product,
+      preferredDeviceId: record.preferredDeviceId ?? null,
       encryptedToken: null,
     };
     if (record.token && safeStorage.isEncryptionAvailable()) {
@@ -208,6 +219,7 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
             clientId: cleanedClientId,
             accountName: null,
             product: null,
+            preferredDeviceId: null,
             token: {
               accessToken: token.access_token,
               refreshToken: token.refresh_token || null,
@@ -271,11 +283,66 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
     });
     if (!response.ok && response.status !== 204) {
       const body = await response.text();
-      throw new Error(`Spotify API request failed (${response.status}): ${body.slice(0, 180)}`);
+      let spotifyMessage = '';
+      let reason = '';
+      try {
+        const parsed = JSON.parse(body);
+        spotifyMessage = parsed?.error?.message || parsed?.error_description || '';
+        reason = parsed?.error?.reason || parsed?.error || '';
+      } catch {
+        // Spotify occasionally returns a plain-text upstream error.
+      }
+      const error = new Error(spotifyMessage || `Spotify request failed (${response.status}).`);
+      error.status = response.status;
+      error.reason = typeof reason === 'string' ? reason : '';
+      throw error;
     }
     if (response.status === 204) return null;
     const contentType = response.headers.get('content-type') || '';
     return contentType.includes('application/json') ? response.json() : null;
+  }
+
+  function normaliseDevice(value) {
+    if (!value || typeof value.id !== 'string' || !value.id) return null;
+    return {
+      id: value.id,
+      name: typeof value.name === 'string' && value.name.trim() ? value.name : 'Spotify device',
+      type: typeof value.type === 'string' ? value.type : 'Unknown',
+      active: Boolean(value.is_active),
+      restricted: Boolean(value.is_restricted),
+      privateSession: Boolean(value.is_private_session),
+      volume: Number.isFinite(value.volume_percent) ? value.volume_percent : null,
+    };
+  }
+
+  async function devices() {
+    const result = await spotifyRequest('/me/player/devices');
+    return (Array.isArray(result?.devices) ? result.devices : []).map(normaliseDevice).filter(Boolean);
+  }
+
+  async function transferToDevice(deviceId, play = false) {
+    const available = await devices();
+    const selected = available.find((device) => device.id === deviceId && !device.restricted);
+    if (!selected) throw new Error('That Spotify device is no longer available. Refresh the device list and try again.');
+    await spotifyRequest('/me/player', {
+      method: 'PUT',
+      body: JSON.stringify({ device_ids: [selected.id], play: Boolean(play) }),
+    });
+    record.preferredDeviceId = selected.id;
+    await save();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return selected;
+  }
+
+  async function ensurePlaybackDevice() {
+    const available = await devices();
+    const selected = chooseSpotifyDevice(available, record?.preferredDeviceId);
+    if (!selected) {
+      throw new Error('No Spotify Connect device is available. Open Spotify on this PC or phone, then press Refresh devices.');
+    }
+    if (!selected.active) return transferToDevice(selected.id, false);
+    record.preferredDeviceId = selected.id;
+    return selected;
   }
 
   async function playSource(source) {
@@ -283,10 +350,15 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
     if (!uri) return false;
     const type = uri.split(':')[1];
     const body = ['track', 'episode'].includes(type) ? { uris: [uri] } : { context_uri: uri };
-    await spotifyRequest('/me/player/play', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    });
+    const device = await ensurePlaybackDevice();
+    const endpoint = `/me/player/play?device_id=${encodeURIComponent(device.id)}`;
+    try {
+      await spotifyRequest(endpoint, { method: 'PUT', body: JSON.stringify(body) });
+    } catch (error) {
+      if (error?.reason !== 'NO_ACTIVE_DEVICE' && error?.status !== 404) throw error;
+      await transferToDevice(device.id, false);
+      await spotifyRequest(endpoint, { method: 'PUT', body: JSON.stringify(body) });
+    }
     return true;
   }
 
@@ -307,6 +379,7 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
       shuffle: Boolean(state?.shuffle_state),
       repeatMode: ['off', 'track', 'context'].includes(state?.repeat_state) ? state.repeat_state : 'off',
       deviceName: state?.device?.name || null,
+      deviceId: state?.device?.id || null,
       ...(message ? { message } : {}),
     };
   }
@@ -315,8 +388,11 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
     if (!['previous', 'toggle', 'next', 'volume', 'seek', 'shuffle', 'repeat'].includes(command)) {
       throw new TypeError('Unsupported Spotify command.');
     }
-    const current = await playbackStatus();
-    if (!current.available) return { ...current, message: 'Open Spotify on a device once, then try the control again.' };
+    let current = await playbackStatus();
+    if (!current.available) {
+      await ensurePlaybackDevice();
+      current = await playbackStatus('Spotify device activated.');
+    }
     if (command === 'previous' || command === 'next') {
       await spotifyRequest(`/me/player/${command}`, { method: 'POST' });
     } else if (command === 'toggle') {
@@ -337,6 +413,15 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
     }
     await new Promise((resolve) => setTimeout(resolve, 120));
     return playbackStatus();
+  }
+
+  async function selectDevice(deviceId) {
+    if (typeof deviceId !== 'string' || deviceId.length < 1 || deviceId.length > 256) {
+      throw new TypeError('Invalid Spotify device.');
+    }
+    const selected = await transferToDevice(deviceId, false);
+    const current = await playbackStatus(`Playback moved to ${selected.name}.`);
+    return { ...current, deviceId: selected.id, deviceName: selected.name, available: true };
   }
 
   function normaliseItem(value) {
@@ -440,7 +525,7 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
     return { header: normaliseItem(detail), items: normaliseItems(children) };
   }
 
-  return { getStatus, connect, disconnect, accessToken, playSource, playbackStatus, control, catalog };
+  return { getStatus, connect, disconnect, accessToken, playSource, playbackStatus, devices, selectDevice, control, catalog };
 }
 
-module.exports = { createSpotifyAuth, spotifyUriFromSource, REDIRECT_REGISTRATION };
+module.exports = { chooseSpotifyDevice, createSpotifyAuth, spotifyUriFromSource, REDIRECT_REGISTRATION };

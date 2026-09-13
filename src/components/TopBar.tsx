@@ -14,7 +14,8 @@ import {
 import { MediaBrandIcon, type MediaService } from './MediaBrandIcon';
 import { getNavigationItem } from '../navigation';
 import { useMedia } from '../state/MediaContext';
-import type { HubSection, SystemSnapshot } from '../types';
+import { platform } from '../services/platform';
+import type { HubSection, SpotifyDevice, SystemSnapshot } from '../types';
 
 export function TopBar({
   section,
@@ -37,6 +38,8 @@ export function TopBar({
 }) {
   const media = useMedia();
   const [mediaMenu, setMediaMenu] = useState<MediaService | null>(null);
+  const [spotifyDevices, setSpotifyDevices] = useState<SpotifyDevice[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
   const mediaMenuRef = useRef<HTMLDivElement>(null);
   const item = getNavigationItem(section);
   const detected = snapshot?.xreal.connection === 'display-detected';
@@ -60,6 +63,46 @@ export function TopBar({
       document.removeEventListener('keydown', escape);
     };
   }, [mediaMenu]);
+
+  async function refreshSpotifyDevices() {
+    setDevicesLoading(true);
+    try {
+      setSpotifyDevices(await platform.getSpotifyDevices());
+    } catch (error) {
+      media.updateStatus('spotify', {
+        message: error instanceof Error ? error.message : 'Spotify devices could not be loaded.',
+      });
+    } finally {
+      setDevicesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (mediaMenu === 'spotify') void refreshSpotifyDevices();
+  }, [mediaMenu]);
+
+  async function selectSpotifyDevice(deviceId: string) {
+    try {
+      const next = await platform.setSpotifyDevice(deviceId);
+      media.updateStatus('spotify', {
+        ready: true,
+        active: next.available,
+        playing: next.playing,
+        title: next.title,
+        detail: next.detail,
+        volume: next.volume,
+        artwork: next.artwork,
+        deviceId: next.deviceId,
+        deviceName: next.deviceName,
+        message: next.message,
+      });
+      await refreshSpotifyDevices();
+    } catch (error) {
+      media.updateStatus('spotify', {
+        message: error instanceof Error ? error.message : 'Spotify could not switch devices.',
+      });
+    }
+  }
 
   function toggleMediaMenu(service: MediaService) {
     media.setActiveService(service);
@@ -126,6 +169,25 @@ export function TopBar({
                   <SkipForward size={18} />
                 </button>
               </div>
+              {mediaMenu === 'spotify' ? (
+                <label className="media-popover__device">
+                  <span>Playback device</span>
+                  <select
+                    aria-label="Spotify playback device"
+                    value={mediaStatus.deviceId ?? spotifyDevices.find((device) => device.active)?.id ?? ''}
+                    onChange={(event) => void selectSpotifyDevice(event.target.value)}
+                    disabled={devicesLoading || spotifyDevices.length === 0}
+                  >
+                    <option value="">{devicesLoading ? 'Finding devices…' : spotifyDevices.length ? 'Choose a device' : 'No devices found'}</option>
+                    {spotifyDevices.map((device) => (
+                      <option key={device.id} value={device.id} disabled={device.restricted}>
+                        {device.name} · {device.type}{device.active ? ' (active)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => void refreshSpotifyDevices()} disabled={devicesLoading}>Refresh</button>
+                </label>
+              ) : null}
               <label className="media-popover__volume">
                 <Volume1 size={16} aria-hidden />
                 <input

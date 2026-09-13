@@ -220,7 +220,18 @@ export interface SpotifyPlaybackStatus {
   shuffle?: boolean;
   repeatMode?: 'off' | 'track' | 'context';
   deviceName?: string | null;
+  deviceId?: string | null;
   message?: string;
+}
+
+export interface SpotifyDevice {
+  id: string;
+  name: string;
+  type: string;
+  active: boolean;
+  restricted: boolean;
+  privateSession: boolean;
+  volume: number | null;
 }
 
 export interface SpotifyCatalogItem {
@@ -287,6 +298,8 @@ export interface XrealHubBridge {
   disconnectSpotify(): Promise<SpotifyAuthStatus>;
   playSpotifySource(source: string): Promise<boolean>;
   getSpotifyPlaybackStatus(): Promise<SpotifyPlaybackStatus>;
+  getSpotifyDevices(): Promise<SpotifyDevice[]>;
+  setSpotifyDevice(deviceId: string): Promise<SpotifyPlaybackStatus>;
   controlSpotify(command: 'previous' | 'toggle' | 'next' | 'volume' | 'seek' | 'shuffle' | 'repeat', value?: number | boolean | string): Promise<SpotifyPlaybackStatus>;
   getSpotifyCatalog(action: 'home' | 'search' | 'library' | 'collection', payload?: { query?: string; uri?: string }): Promise<SpotifyCatalogResult>;
   clearLocalData(): Promise<boolean>;

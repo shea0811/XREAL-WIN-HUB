@@ -143,6 +143,8 @@ export function SpotifyPremiumPlayer({
         durationMs: state.durationMs,
         shuffle: state.shuffle,
         repeatMode: state.repeatMode,
+        deviceId: state.deviceId,
+        deviceName: state.deviceName,
         message: state.message,
       });
     };
