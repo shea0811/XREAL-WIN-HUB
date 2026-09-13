@@ -28,9 +28,10 @@ describe('security invariants', () => {
 
   it('pins the Windows display helper to its reviewed SHA-256 digest', async () => {
     const main = await source('electron/main.cjs');
-    const helper = await readFile(new URL('../electron/windows-display.ps1', import.meta.url));
-    const digest = createHash('sha256').update(helper).digest('hex');
+    const helper = await readFile(new URL('../electron/windows-display.ps1', import.meta.url), 'utf8');
+    const digest = createHash('sha256').update(helper.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     expect(main).toContain(`const DISPLAY_HELPER_SHA256 = '${digest}'`);
+    expect(main).toContain("replace(/\\r\\n/g, '\\n')");
     expect(main).toContain('await verifyDisplayHelper()');
   });
 

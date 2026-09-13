@@ -44,7 +44,7 @@ describe('Spotify Hub', () => {
 
     await act(async () => {
       root.render(<MediaProvider><SpotifyHub onToast={() => undefined} /></MediaProvider>);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 25));
     });
 
     expect(catalog).toHaveBeenCalledWith('home', undefined);

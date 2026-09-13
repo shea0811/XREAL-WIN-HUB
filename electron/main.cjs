@@ -553,7 +553,10 @@ function displayHelperPath() {
 async function verifyDisplayHelper() {
   const helperPath = displayHelperPath();
   const contents = await fs.readFile(helperPath);
-  const digest = createHash('sha256').update(contents).digest('hex');
+  // Git commonly checks text files out as CRLF on Windows. Hash canonical LF
+  // content so a safe line-ending conversion does not disable display tools.
+  const canonicalContents = contents.toString('utf8').replace(/\r\n/g, '\n');
+  const digest = createHash('sha256').update(canonicalContents, 'utf8').digest('hex');
   if (digest !== DISPLAY_HELPER_SHA256) {
     await recordSecurityEvent('display:helper-integrity', 'blocked', digest);
     throw new Error('The Windows display helper failed its integrity check. Reinstall the Hub.');
