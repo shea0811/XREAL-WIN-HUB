@@ -164,9 +164,13 @@ button:disabled { cursor: not-allowed; opacity: 0.48; }
 .topbar__title { display: flex; flex-direction: column; min-width: 0; }
 .topbar__title span { font-size: .88rem; font-weight: 700; }
 .topbar__title small { overflow: hidden; color: var(--muted); font-size: .71rem; text-overflow: ellipsis; white-space: nowrap; }
-.command-trigger { display: flex; align-items: center; width: 100%; height: 40px; gap: 10px; padding: 0 10px 0 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 11px; transition: 150ms ease; }
+.topbar__search-cluster { display: flex; min-width: 0; align-items: center; justify-content: flex-start; gap: 8px; }
+.command-trigger { display: flex; align-items: center; width: 40px; height: 40px; gap: 10px; padding: 0 11px; overflow: hidden; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 11px; transition: width 260ms cubic-bezier(.2,.8,.2,1),border-color 160ms ease,box-shadow 160ms ease; }
+.command-trigger:hover,.command-trigger:focus-visible { width: min(100%,360px); }
 .command-trigger:hover { color: var(--text-soft); border-color: var(--border-strong); }
-.command-trigger > span { flex: 1; text-align: left; }
+.command-trigger > svg { flex: 0 0 auto; }
+.command-trigger > span { min-width: 190px; flex: 1; text-align: left; white-space: nowrap; }
+.command-trigger > kbd { flex: 0 0 auto; }
 kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 7px; color: var(--text-soft); font: 600 .68rem/1 "Segoe UI",sans-serif; background: var(--panel-raised); border: 1px solid var(--border); border-bottom-color: var(--border-strong); border-radius: 6px; }
 .topbar__actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .topbar-media { position: relative; display: flex; align-items: center; gap: 5px; padding-right: 3px; }
@@ -197,6 +201,29 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 7px; col
 .media-popover__system-volume > div { display: flex; gap: 6px; }
 .media-popover__system-volume button { width: 31px; height: 31px; border-radius: 8px; }
 .media-popover > p { margin: 12px 0 0; padding-top: 10px; color: var(--orange); font-size: .61rem; line-height: 1.45; border-top: 1px solid var(--border); }
+.audio-menu { position: relative; }
+.audio-menu > .icon-button[data-active="true"] { color: var(--teal); background: var(--teal-soft); border-color: color-mix(in srgb,var(--teal) 22%,transparent); }
+.audio-popover { position: absolute; top: 45px; right: 0; z-index: 21; width: 340px; padding: 18px; background: color-mix(in srgb,var(--bg-elevated) 97%,transparent); border: 1px solid var(--border-strong); border-radius: 15px; box-shadow: var(--shadow); animation: popover-in 150ms ease both; }
+.audio-popover > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.audio-popover > header span { display: flex; min-width: 0; flex-direction: column; }
+.audio-popover > header strong { font-size: .8rem; }.audio-popover > header small { margin-top: 3px; color: var(--muted); font-size: .59rem; }
+.audio-popover > header b { color: var(--teal); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.audio-master { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; margin: 17px 0; padding: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 11px; }
+.audio-master input,.audio-preset__detail input { width: 100%; accent-color: var(--teal); }
+.audio-presets { display: grid; gap: 7px; }
+.audio-preset { display: grid; grid-template-columns: minmax(0,1fr) auto; overflow: hidden; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; transition: 150ms ease; }
+.audio-preset[data-active="true"] { background: var(--teal-soft); border-color: color-mix(in srgb,var(--teal) 35%,var(--border)); }
+.audio-preset > button[role="radio"] { display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: center; gap: 9px; padding: 9px 11px; color: var(--text-soft); text-align: left; background: transparent; }
+.audio-preset > button[role="radio"] > span:last-child { display: flex; min-width: 0; flex-direction: column; font-size: .68rem; font-weight: 700; }
+.audio-preset > button[role="radio"] small { margin-top: 2px; color: var(--muted); font-size: .55rem; font-weight: 500; }
+.audio-preset__brand { display: grid; width: 28px; height: 28px; place-items: center; color: #08100d; font-size: .66rem; font-weight: 900; background: var(--teal); border-radius: 8px; }
+.audio-preset__brand--spotify { background: #1ed760; }.audio-preset__brand--youtube { color: #fff; background: #f03; }.audio-preset__brand--discord { color: #fff; background: #5865f2; }
+.audio-preset__expand { width: 40px; color: var(--teal); background: transparent; }
+.audio-preset__detail { grid-column: 1/-1; display: grid; gap: 10px; padding: 12px; background: color-mix(in srgb,var(--bg-elevated) 45%,transparent); border-top: 1px solid var(--border); }
+.audio-preset__detail label { display: grid; gap: 7px; color: var(--text-soft); font-size: .59rem; }
+.audio-preset__detail p,.audio-popover__message { margin: 0; color: var(--muted); font-size: .57rem; line-height: 1.5; }
+.audio-popover__hint { display: block; margin-top: 10px; color: var(--muted); font-size: .55rem; text-align: center; }
+.audio-popover__message { margin-top: 11px; color: var(--orange); }
 .device-indicator { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .73rem; font-weight: 600; }
 .device-indicator > span, .status-dot { display: inline-block; width: 7px; height: 7px; background: var(--orange); border-radius: 50%; box-shadow: 0 0 9px color-mix(in srgb,var(--orange) 65%,transparent); }
 .device-indicator[data-connected="true"] > span, .status-pill--positive .status-dot, .save-state .status-dot { background: var(--green); box-shadow: 0 0 9px color-mix(in srgb,var(--green) 65%,transparent); }

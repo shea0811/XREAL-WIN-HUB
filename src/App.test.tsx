@@ -78,6 +78,7 @@ describe('application shell', () => {
       ['Display Layout Studio', 'Desktop coordinate space'],
       ['Entertainment', 'Choose what plays in the Hub'],
       ['WhatsApp', 'WhatsApp Web needs the installed Windows app'],
+      ['Discord', 'Discord needs the installed Windows app'],
       ['Notes & study', 'Local notebook'],
       ['Workspaces', 'One-click setups'],
       ['Gestures', 'Gesture studio'],
@@ -280,13 +281,18 @@ describe('application shell', () => {
     expect(container.querySelector<HTMLButtonElement>('[aria-label="Previous"]')).not.toBeNull();
     expect(container.querySelector<HTMLButtonElement>('[aria-label="Play"]')).not.toBeNull();
     expect(container.querySelector<HTMLButtonElement>('[aria-label="Next"]')).not.toBeNull();
-    expect(container.querySelector<HTMLInputElement>('[aria-label="Spotify volume"]')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Spotify volume"]')).toBeNull();
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('Home');
 
     await click(container.querySelector<HTMLButtonElement>('[aria-label="Open YouTube controls"]') ?? undefined);
     expect(container.querySelector('[aria-label="YouTube controls"]')).not.toBeNull();
-    expect(container.querySelector<HTMLInputElement>('[aria-label="YouTube volume"]')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('[aria-label="YouTube volume"]')).toBeNull();
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('Home');
+
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Open Windows volume controls"]') ?? undefined);
+    expect(container.querySelector('[aria-label="Windows volume controls"]')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Master volume"]')).not.toBeNull();
+    expect(container.querySelector('[role="radiogroup"]')?.textContent).toContain('Discord');
   });
 
   it('applies appearance settings and operates the command palette', async () => {

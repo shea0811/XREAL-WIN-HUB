@@ -45,6 +45,9 @@ const channels = Object.freeze({
   displayRevert: 'display:revert',
   displayIdentify: 'display:identify',
   mediaKey: 'media:key',
+  audioSnapshot: 'audio:snapshot',
+  audioMaster: 'audio:master',
+  audioSession: 'audio:session',
   spotifyStatus: 'spotify:status',
   spotifyConnect: 'spotify:connect',
   spotifyDisconnect: 'spotify:disconnect',
@@ -62,6 +65,14 @@ const channels = Object.freeze({
   whatsappDetach: 'whatsapp:detach',
   whatsappAlwaysOnTop: 'whatsapp:always-on-top',
   whatsappClearData: 'whatsapp:clear-data',
+  discordStatus: 'discord:status',
+  discordStatusChanged: 'discord:status-changed',
+  discordEmbedded: 'discord:embedded',
+  discordReload: 'discord:reload',
+  discordNavigate: 'discord:navigate',
+  discordDetach: 'discord:detach',
+  discordAlwaysOnTop: 'discord:always-on-top',
+  discordClearData: 'discord:clear-data',
 });
 
 const SIMULATED_DISPLAY_ID = 'xreal-one-pro-simulated';
@@ -77,6 +88,12 @@ let whatsappEmbeddedRequested = false;
 let whatsappBounds = null;
 let whatsappState = 'idle';
 let whatsappSessionConfigured = false;
+let discordView = null;
+let discordWindow = null;
+let discordEmbeddedRequested = false;
+let discordBounds = null;
+let discordState = 'idle';
+let discordSessionConfigured = false;
 const spotifyAuth = createSpotifyAuth({ app, safeStorage, shell });
 
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
@@ -85,7 +102,13 @@ const CHROME_MAJOR = String(process.versions.chrome || '142.0.0.0').split('.')[0
 const WHATSAPP_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome || '142.0.0.0'} Safari/537.36`;
 const WHATSAPP_PERMISSIONS = new Set(['media', 'notifications', 'clipboard-sanitized-write']);
 const grantedWhatsAppPermissions = new Set(['clipboard-sanitized-write']);
+const DISCORD_URL = 'https://discord.com/app';
+const DISCORD_PARTITION = 'persist:discord';
+const DISCORD_USER_AGENT = WHATSAPP_USER_AGENT;
+const DISCORD_PERMISSIONS = new Set(['media', 'notifications', 'clipboard-sanitized-write']);
+const grantedDiscordPermissions = new Set(['clipboard-sanitized-write']);
 const DISPLAY_HELPER_SHA256 = '49367428d9ae8f1746450b7d2a550ea88fc4886e4e2f88f44cf56596b3d997aa';
+const AUDIO_HELPER_SHA256 = 'ad3b55c386a11780060d0e6995324fc0fcefee3f24a6dc53a9c7ba364c182f0a';
 const IPC_WINDOW_MS = 10_000;
 const IPC_MAX_CALLS = 180;
 const ipcRateWindows = new Map();
@@ -99,6 +122,15 @@ const approvedExternalHosts = new Set([
 function isWhatsAppOrigin(value) {
   try {
     return new URL(value).origin === 'https://web.whatsapp.com';
+  } catch {
+    return false;
+  }
+}
+
+function isDiscordOrigin(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && (parsed.hostname === 'discord.com' || parsed.hostname.endsWith('.discord.com'));
   } catch {
     return false;
   }
@@ -190,6 +222,10 @@ function hideWhatsAppForPrivacy(reason = 'privacy-lock') {
   if (whatsappWindow && !whatsappWindow.isDestroyed()) whatsappWindow.hide();
   void recordSecurityEvent('whatsapp:privacy-hide', 'allowed', reason);
   publishWhatsAppStatus('WhatsApp was hidden for privacy. Return to its page when you are ready.');
+  discordEmbeddedRequested = false;
+  removeDiscordView();
+  if (discordWindow && !discordWindow.isDestroyed()) discordWindow.hide();
+  publishDiscordStatus('Discord was hidden for privacy. Return to its page when you are ready.');
 }
 
 function whatsappStatus(message) {
@@ -426,6 +462,163 @@ async function clearWhatsAppData() {
   return publishWhatsAppStatus('WhatsApp linked-session data was removed from this PC.');
 }
 
+function discordStatus(message) {
+  const contents = discordWindow && !discordWindow.isDestroyed() ? discordWindow.webContents : discordView?.webContents;
+  return {
+    supported: true,
+    state: discordWindow && !discordWindow.isDestroyed() ? 'detached' : discordState,
+    canGoBack: Boolean(contents?.canGoBack()),
+    canGoForward: Boolean(contents?.canGoForward()),
+    detached: Boolean(discordWindow && !discordWindow.isDestroyed()),
+    ...(message ? { message } : {}),
+  };
+}
+
+function publishDiscordStatus(message) {
+  const status = discordStatus(message);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channels.discordStatusChanged, status);
+  return status;
+}
+
+function configureDiscordContents(contents) {
+  contents.setUserAgent(DISCORD_USER_AGENT);
+  contents.setWindowOpenHandler(({ url }) => {
+    if (isDiscordOrigin(url)) {
+      void contents.loadURL(url);
+    } else if (isSafeExternalHttps(url)) {
+      void confirmAndOpenExternal(url);
+    }
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (event, url) => {
+    if (isDiscordOrigin(url)) return;
+    event.preventDefault();
+    if (isSafeExternalHttps(url)) void confirmAndOpenExternal(url);
+  });
+  contents.on('did-start-loading', () => { discordState = 'loading'; publishDiscordStatus(); });
+  contents.on('did-finish-load', () => { discordState = 'ready'; publishDiscordStatus(); });
+  contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    discordState = 'failed';
+    console.error('Discord Web failed to load', { errorCode, errorDescription, validatedURL });
+    publishDiscordStatus('Discord could not connect. Check the network and reload it.');
+  });
+  contents.on('render-process-gone', (_event, details) => {
+    discordState = 'failed';
+    console.error('Discord renderer exited unexpectedly', details);
+    publishDiscordStatus('The isolated Discord process stopped. Reload it to continue.');
+  });
+}
+
+function configureDiscordSession() {
+  const isolatedSession = session.fromPartition(DISCORD_PARTITION, { cache: true });
+  isolatedSession.setUserAgent(DISCORD_USER_AGENT, 'en-GB,en;q=0.9');
+  if (!discordSessionConfigured) {
+    discordSessionConfigured = true;
+    isolatedSession.webRequest.onBeforeSendHeaders(
+      { urls: ['https://discord.com/*', 'https://*.discord.com/*'] },
+      (details, callback) => {
+        const headers = { ...details.requestHeaders, 'User-Agent': DISCORD_USER_AGENT };
+        callback({ requestHeaders: headers });
+      },
+    );
+  }
+  isolatedSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
+    isDiscordOrigin(requestingOrigin) && DISCORD_PERMISSIONS.has(permission) && grantedDiscordPermissions.has(permission));
+  isolatedSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    if (!isDiscordOrigin(details.requestingUrl) || !DISCORD_PERMISSIONS.has(permission)) return callback(false);
+    if (grantedDiscordPermissions.has(permission)) return callback(true);
+    const capability = permission === 'media' ? 'your microphone and camera' : 'notifications';
+    const options = {
+      type: 'question', title: 'Discord permission', message: `Allow Discord to use ${capability}?`,
+      detail: 'This applies only to the isolated Discord session. Discord cannot access Hub APIs or local files.',
+      buttons: ['Allow', 'Block'], defaultId: 1, cancelId: 1, noLink: true,
+    };
+    const prompt = mainWindow && !mainWindow.isDestroyed() ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options);
+    void prompt.then(({ response }) => {
+      const approved = response === 0;
+      if (approved) grantedDiscordPermissions.add(permission);
+      callback(approved);
+    }).catch(() => callback(false));
+  });
+  isolatedSession.setDisplayMediaRequestHandler((_request, callback) => callback({}));
+  return isolatedSession;
+}
+
+async function ensureDiscordView() {
+  if (discordView && !discordView.webContents.isDestroyed()) return discordView;
+  configureDiscordSession();
+  discordView = new WebContentsView({ webPreferences: {
+    partition: DISCORD_PARTITION, nodeIntegration: false, contextIsolation: true,
+    sandbox: true, webSecurity: true, allowRunningInsecureContent: false,
+  } });
+  configureDiscordContents(discordView.webContents);
+  await discordView.webContents.loadURL(DISCORD_URL);
+  return discordView;
+}
+
+function removeDiscordView() {
+  if (!mainWindow || !discordView) return;
+  try { mainWindow.contentView.removeChildView(discordView); } catch { /* Already detached. */ }
+}
+
+async function setDiscordEmbedded(visible, bounds) {
+  discordEmbeddedRequested = Boolean(visible);
+  if (!visible || (discordWindow && !discordWindow.isDestroyed())) {
+    removeDiscordView();
+    return discordStatus();
+  }
+  const validated = validateWhatsAppBounds(bounds);
+  if (!validated) throw new TypeError('Invalid Discord view bounds.');
+  discordBounds = validated;
+  const view = await ensureDiscordView();
+  if (!mainWindow || mainWindow.isDestroyed()) return discordStatus();
+  removeDiscordView();
+  mainWindow.contentView.addChildView(view);
+  view.setBounds(validated);
+  return discordStatus();
+}
+
+async function detachDiscord(alwaysOnTop) {
+  if (discordWindow && !discordWindow.isDestroyed()) {
+    discordWindow.focus();
+    return discordStatus();
+  }
+  removeDiscordView();
+  discordWindow = new BrowserWindow({
+    title: 'Discord — XREAL WIN HUB', width: 1080, height: 720, minWidth: 720, minHeight: 520,
+    show: false, autoHideMenuBar: true, alwaysOnTop: Boolean(alwaysOnTop), backgroundColor: '#313338',
+    webPreferences: { partition: DISCORD_PARTITION, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false },
+  });
+  configureDiscordSession();
+  configureDiscordContents(discordWindow.webContents);
+  discordWindow.once('ready-to-show', () => discordWindow?.show());
+  discordWindow.setContentProtection(true);
+  discordWindow.on('closed', () => {
+    discordWindow = null;
+    publishDiscordStatus();
+    if (discordEmbeddedRequested && discordBounds) void setDiscordEmbedded(true, discordBounds).catch((error) => console.error('Unable to restore Discord view', error));
+  });
+  await discordWindow.loadURL(DISCORD_URL);
+  return publishDiscordStatus();
+}
+
+async function clearDiscordData() {
+  discordEmbeddedRequested = false;
+  removeDiscordView();
+  if (discordWindow && !discordWindow.isDestroyed()) discordWindow.destroy();
+  discordWindow = null;
+  if (discordView && !discordView.webContents.isDestroyed()) discordView.webContents.close();
+  discordView = null;
+  discordState = 'idle';
+  grantedDiscordPermissions.clear();
+  grantedDiscordPermissions.add('clipboard-sanitized-write');
+  const isolatedSession = session.fromPartition(DISCORD_PARTITION);
+  await Promise.all([isolatedSession.clearStorageData(), isolatedSession.clearCache(), isolatedSession.clearAuthCache()]);
+  await recordSecurityEvent('discord:clear-data', 'allowed');
+  return publishDiscordStatus('Discord session data was removed from this PC.');
+}
+
 function statePath() {
   return path.join(app.getPath('userData'), STATE_FILE);
 }
@@ -577,6 +770,43 @@ async function runDisplayHelper(action, payloadPath) {
     windowsHide: true,
     timeout: 15_000,
     maxBuffer: 2 * 1024 * 1024,
+  });
+  return JSON.parse(stdout.trim());
+}
+
+function audioHelperPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'windows-audio.ps1');
+  }
+  return path.join(__dirname, 'windows-audio.ps1');
+}
+
+async function verifyAudioHelper() {
+  const helperPath = audioHelperPath();
+  const contents = await fs.readFile(helperPath, 'utf8');
+  const digest = createHash('sha256').update(contents.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+  if (digest !== AUDIO_HELPER_SHA256) {
+    await recordSecurityEvent('audio:helper-integrity', 'blocked', digest);
+    throw new Error('The Windows audio helper failed its integrity check. Reinstall the Hub.');
+  }
+  return helperPath;
+}
+
+async function runAudioHelper(action, volume, sessionKey) {
+  if (process.platform !== 'win32') {
+    return { supported: false, masterVolume: 50, sessions: [] };
+  }
+  const helperPath = await verifyAudioHelper();
+  const args = [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', helperPath, '-Action', action,
+  ];
+  if (Number.isFinite(volume)) args.push('-Volume', String(Math.max(0, Math.min(100, Math.round(volume)))));
+  if (sessionKey) args.push('-SessionKey', sessionKey);
+  const { stdout } = await execFileAsync('powershell.exe', args, {
+    windowsHide: true,
+    timeout: 8_000,
+    maxBuffer: 512 * 1024,
   });
   return JSON.parse(stdout.trim());
 }
@@ -868,6 +1098,7 @@ async function saveState(state) {
 
 async function clearLocalData() {
   await spotifyAuth.disconnect();
+  await Promise.all([clearWhatsAppData(), clearDiscordData()]);
   await mainWindow?.webContents.session.clearStorageData({ storages: ['localstorage', 'indexdb', 'cachestorage'] });
   await Promise.all([
     fs.rm(statePath(), { force: true }),
@@ -939,6 +1170,18 @@ function registerIpc() {
   registerTrustedHandler(channels.displayRevert, revertDisplayLayout);
   registerTrustedHandler(channels.displayIdentify, identifyDisplays);
   registerTrustedHandler(channels.mediaKey, (command) => sendMediaKey(command));
+  registerTrustedHandler(channels.audioSnapshot, () => runAudioHelper('Get'));
+  registerTrustedHandler(channels.audioMaster, (volume) => {
+    if (!Number.isFinite(volume)) throw new TypeError('Master volume must be a number.');
+    return runAudioHelper('SetMaster', volume);
+  });
+  registerTrustedHandler(channels.audioSession, (sessionKey, volume) => {
+    if (typeof sessionKey !== 'string' || !/^[a-z0-9 ._()-]{1,120}$/i.test(sessionKey)) {
+      throw new TypeError('Invalid audio session.');
+    }
+    if (!Number.isFinite(volume)) throw new TypeError('Application volume must be a number.');
+    return runAudioHelper('SetSession', volume, sessionKey);
+  });
   registerTrustedHandler(channels.spotifyStatus, () => spotifyAuth.getStatus());
   registerTrustedHandler(channels.spotifyConnect, (clientId) => spotifyAuth.connect(clientId));
   registerTrustedHandler(channels.spotifyDisconnect, () => spotifyAuth.disconnect());
@@ -977,6 +1220,27 @@ function registerIpc() {
     return whatsappWindow.isAlwaysOnTop();
   });
   registerTrustedHandler(channels.whatsappClearData, clearWhatsAppData);
+  registerTrustedHandler(channels.discordStatus, () => discordStatus());
+  registerTrustedHandler(channels.discordEmbedded, (visible, bounds) => setDiscordEmbedded(visible, bounds));
+  registerTrustedHandler(channels.discordReload, async () => {
+    const contents = discordWindow && !discordWindow.isDestroyed() ? discordWindow.webContents : (await ensureDiscordView()).webContents;
+    contents.reload();
+    return discordStatus();
+  });
+  registerTrustedHandler(channels.discordNavigate, async (direction) => {
+    if (direction !== 'back' && direction !== 'forward') throw new TypeError('Invalid navigation direction.');
+    const contents = discordWindow && !discordWindow.isDestroyed() ? discordWindow.webContents : (await ensureDiscordView()).webContents;
+    if (direction === 'back' && contents.canGoBack()) contents.goBack();
+    if (direction === 'forward' && contents.canGoForward()) contents.goForward();
+    return discordStatus();
+  });
+  registerTrustedHandler(channels.discordDetach, (alwaysOnTop) => detachDiscord(Boolean(alwaysOnTop)));
+  registerTrustedHandler(channels.discordAlwaysOnTop, (enabled) => {
+    if (!discordWindow || discordWindow.isDestroyed()) return false;
+    discordWindow.setAlwaysOnTop(Boolean(enabled), 'floating');
+    return discordWindow.isAlwaysOnTop();
+  });
+  registerTrustedHandler(channels.discordClearData, clearDiscordData);
 }
 
 async function createWindow() {
@@ -1018,8 +1282,12 @@ async function createWindow() {
   mainWindow.on('closed', () => {
     if (whatsappWindow && !whatsappWindow.isDestroyed()) whatsappWindow.destroy();
     if (whatsappView && !whatsappView.webContents.isDestroyed()) whatsappView.webContents.close();
+    if (discordWindow && !discordWindow.isDestroyed()) discordWindow.destroy();
+    if (discordView && !discordView.webContents.isDestroyed()) discordView.webContents.close();
     whatsappWindow = null;
     whatsappView = null;
+    discordWindow = null;
+    discordView = null;
     mainWindow = null;
   });
 

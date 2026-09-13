@@ -6,6 +6,7 @@ export type HubSection =
   | 'spotify'
   | 'youtube'
   | 'whatsapp'
+  | 'discord'
   | 'notes'
   | 'workspaces'
   | 'gestures'
@@ -234,6 +235,21 @@ export interface SpotifyDevice {
   volume: number | null;
 }
 
+export interface AudioSessionInfo {
+  key: string;
+  name: string;
+  volume: number;
+  muted: boolean;
+  processId: number;
+}
+
+export interface AudioSnapshot {
+  supported: boolean;
+  masterVolume: number;
+  sessions: AudioSessionInfo[];
+  message?: string;
+}
+
 export interface SpotifyCatalogItem {
   id: string;
   uri: string;
@@ -266,6 +282,8 @@ export interface WhatsAppStatus {
   message?: string;
 }
 
+export type DiscordStatus = WhatsAppStatus;
+
 export interface EmbeddedViewBounds {
   x: number;
   y: number;
@@ -293,6 +311,9 @@ export interface XrealHubBridge {
   revertDisplayLayout(): Promise<DisplayLayoutSnapshot>;
   identifyDisplays(): Promise<boolean>;
   sendMediaKey(command: 'previous' | 'toggle' | 'next' | 'volume-up' | 'volume-down'): Promise<boolean>;
+  getAudioSnapshot(): Promise<AudioSnapshot>;
+  setMasterVolume(volume: number): Promise<AudioSnapshot>;
+  setAudioSessionVolume(sessionKey: string, volume: number): Promise<AudioSnapshot>;
   getSpotifyAuthStatus(): Promise<SpotifyAuthStatus>;
   connectSpotify(clientId: string): Promise<SpotifyAuthStatus>;
   disconnectSpotify(): Promise<SpotifyAuthStatus>;
@@ -311,6 +332,14 @@ export interface XrealHubBridge {
   setWhatsAppAlwaysOnTop(enabled: boolean): Promise<boolean>;
   clearWhatsAppData(): Promise<WhatsAppStatus>;
   onWhatsAppStatus(callback: (status: WhatsAppStatus) => void): () => void;
+  getDiscordStatus(): Promise<DiscordStatus>;
+  setDiscordEmbedded(visible: boolean, bounds?: EmbeddedViewBounds): Promise<DiscordStatus>;
+  reloadDiscord(): Promise<DiscordStatus>;
+  navigateDiscord(direction: 'back' | 'forward'): Promise<DiscordStatus>;
+  detachDiscord(alwaysOnTop: boolean): Promise<DiscordStatus>;
+  setDiscordAlwaysOnTop(enabled: boolean): Promise<boolean>;
+  clearDiscordData(): Promise<DiscordStatus>;
+  onDiscordStatus(callback: (status: DiscordStatus) => void): () => void;
   onSystemSnapshot(callback: (snapshot: SystemSnapshot) => void): () => void;
 }
 

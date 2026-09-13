@@ -63,4 +63,13 @@ describe('security invariants', () => {
     expect(auth).toContain("payload.query.trim().slice(0, 100)");
     expect(preload).toContain('getSpotifyCatalog: (action, payload)');
   });
+
+  it('isolates Discord from Hub privileges and external navigation', async () => {
+    const main = await source('electron/main.cjs');
+    expect(main).toContain("const DISCORD_PARTITION = 'persist:discord'");
+    expect(main).toContain('partition: DISCORD_PARTITION, nodeIntegration: false, contextIsolation: true');
+    expect(main).toContain('sandbox: true, webSecurity: true, allowRunningInsecureContent: false');
+    expect(main).toContain('if (isDiscordOrigin(url)) return;');
+    expect(main).toContain('DISCORD_PERMISSIONS.has(permission)');
+  });
 });

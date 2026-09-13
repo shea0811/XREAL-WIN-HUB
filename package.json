@@ -1,6 +1,6 @@
 {
   "name": "xreal-win-hub",
-  "version": "0.2.0-beta.8",
+  "version": "0.2.0-beta.9",
   "private": true,
   "author": "XREAL WIN HUB contributors",
   "description": "A local-first Windows command centre for XREAL displays, workspaces, notes, entertainment, and gesture-ready workflows.",
@@ -46,7 +46,8 @@
     "productName": "XREAL WIN HUB",
     "asar": true,
     "asarUnpack": [
-      "electron/windows-display.ps1"
+      "electron/windows-display.ps1",
+      "electron/windows-audio.ps1"
     ],
     "electronFuses": {
       "runAsNode": false,

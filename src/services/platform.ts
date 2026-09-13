@@ -18,6 +18,7 @@ let browserLayoutOverride: DisplayLayoutItem[] | null = null;
 let browserPendingLayout: DisplayLayoutItem[] | null = null;
 const browserSnapshotListeners = new Set<(snapshot: SystemSnapshot) => void>();
 const browserWhatsAppListeners = new Set<Parameters<XrealHubBridge['onWhatsAppStatus']>[0]>();
+const browserDiscordListeners = new Set<Parameters<XrealHubBridge['onDiscordStatus']>[0]>();
 const browserWhatsAppStatus = {
   supported: false,
   state: 'idle' as const,
@@ -25,6 +26,14 @@ const browserWhatsAppStatus = {
   canGoForward: false,
   detached: false,
   message: 'WhatsApp Web is available in the installed Windows app.',
+};
+const browserDiscordStatus = {
+  supported: false,
+  state: 'idle' as const,
+  canGoBack: false,
+  canGoForward: false,
+  detached: false,
+  message: 'Discord is available in the installed Windows app.',
 };
 
 function browserSnapshot(): SystemSnapshot {
@@ -206,6 +215,15 @@ const browserBridge: XrealHubBridge = {
   async sendMediaKey() {
     return false;
   },
+  async getAudioSnapshot() {
+    return { supported: false, masterVolume: 50, sessions: [], message: 'Windows audio controls are available in the installed app.' };
+  },
+  async setMasterVolume(volume: number) {
+    return { supported: false, masterVolume: volume, sessions: [] };
+  },
+  async setAudioSessionVolume() {
+    return this.getAudioSnapshot();
+  },
   async getSpotifyAuthStatus() {
     return {
       supported: false,
@@ -273,6 +291,17 @@ const browserBridge: XrealHubBridge = {
   onWhatsAppStatus(callback) {
     browserWhatsAppListeners.add(callback);
     return () => browserWhatsAppListeners.delete(callback);
+  },
+  async getDiscordStatus() { return browserDiscordStatus; },
+  async setDiscordEmbedded() { return browserDiscordStatus; },
+  async reloadDiscord() { return browserDiscordStatus; },
+  async navigateDiscord() { return browserDiscordStatus; },
+  async detachDiscord() { return browserDiscordStatus; },
+  async setDiscordAlwaysOnTop() { return false; },
+  async clearDiscordData() { return browserDiscordStatus; },
+  onDiscordStatus(callback) {
+    browserDiscordListeners.add(callback);
+    return () => browserDiscordListeners.delete(callback);
   },
   onSystemSnapshot(callback) {
     browserSnapshotListeners.add(callback);

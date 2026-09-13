@@ -18,6 +18,7 @@ import { MediaServicePage } from './modules/MediaServicePage';
 import { Notes } from './modules/Notes';
 import { Workspaces } from './modules/Workspaces';
 import { WhatsApp } from './modules/WhatsApp';
+import { Discord } from './modules/Discord';
 import { Agents } from './modules/Agents';
 import { Settings } from './modules/Settings';
 import { platform } from './services/platform';
@@ -313,6 +314,8 @@ function AppShell() {
             obscured={paletteOpen || notificationCenterOpen}
           />
         );
+      case 'discord':
+        return <Discord onToast={showToast} obscured={paletteOpen || notificationCenterOpen} />;
       case 'notes':
         return <Notes onToast={showToast} />;
       case 'workspaces':

@@ -9,6 +9,7 @@ import {
   MonitorCog,
   Music2,
   MessageCircle,
+  Gamepad2,
   Settings,
   Video,
   type LucideIcon,
@@ -58,6 +59,13 @@ export const NAVIGATION: NavigationItem[] = [
     shortLabel: 'WhatsApp',
     description: 'Secure linked-device workspace',
     icon: MessageCircle,
+  },
+  {
+    id: 'discord',
+    label: 'Discord',
+    shortLabel: 'Discord',
+    description: 'Communities, chat, and voice',
+    icon: Gamepad2,
   },
   {
     id: 'notes',

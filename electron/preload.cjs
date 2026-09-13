@@ -21,6 +21,9 @@ const channels = Object.freeze({
   displayRevert: 'display:revert',
   displayIdentify: 'display:identify',
   mediaKey: 'media:key',
+  audioSnapshot: 'audio:snapshot',
+  audioMaster: 'audio:master',
+  audioSession: 'audio:session',
   spotifyStatus: 'spotify:status',
   spotifyConnect: 'spotify:connect',
   spotifyDisconnect: 'spotify:disconnect',
@@ -38,6 +41,14 @@ const channels = Object.freeze({
   whatsappDetach: 'whatsapp:detach',
   whatsappAlwaysOnTop: 'whatsapp:always-on-top',
   whatsappClearData: 'whatsapp:clear-data',
+  discordStatus: 'discord:status',
+  discordStatusChanged: 'discord:status-changed',
+  discordEmbedded: 'discord:embedded',
+  discordReload: 'discord:reload',
+  discordNavigate: 'discord:navigate',
+  discordDetach: 'discord:detach',
+  discordAlwaysOnTop: 'discord:always-on-top',
+  discordClearData: 'discord:clear-data',
 });
 
 contextBridge.exposeInMainWorld('xrealHub', {
@@ -60,6 +71,9 @@ contextBridge.exposeInMainWorld('xrealHub', {
   revertDisplayLayout: () => ipcRenderer.invoke(channels.displayRevert),
   identifyDisplays: () => ipcRenderer.invoke(channels.displayIdentify),
   sendMediaKey: (command) => ipcRenderer.invoke(channels.mediaKey, command),
+  getAudioSnapshot: () => ipcRenderer.invoke(channels.audioSnapshot),
+  setMasterVolume: (volume) => ipcRenderer.invoke(channels.audioMaster, volume),
+  setAudioSessionVolume: (sessionKey, volume) => ipcRenderer.invoke(channels.audioSession, sessionKey, volume),
   getSpotifyAuthStatus: () => ipcRenderer.invoke(channels.spotifyStatus),
   connectSpotify: (clientId) => ipcRenderer.invoke(channels.spotifyConnect, clientId),
   disconnectSpotify: () => ipcRenderer.invoke(channels.spotifyDisconnect),
@@ -81,6 +95,18 @@ contextBridge.exposeInMainWorld('xrealHub', {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on(channels.whatsappStatusChanged, listener);
     return () => ipcRenderer.removeListener(channels.whatsappStatusChanged, listener);
+  },
+  getDiscordStatus: () => ipcRenderer.invoke(channels.discordStatus),
+  setDiscordEmbedded: (visible, bounds) => ipcRenderer.invoke(channels.discordEmbedded, visible, bounds),
+  reloadDiscord: () => ipcRenderer.invoke(channels.discordReload),
+  navigateDiscord: (direction) => ipcRenderer.invoke(channels.discordNavigate, direction),
+  detachDiscord: (alwaysOnTop) => ipcRenderer.invoke(channels.discordDetach, alwaysOnTop),
+  setDiscordAlwaysOnTop: (enabled) => ipcRenderer.invoke(channels.discordAlwaysOnTop, enabled),
+  clearDiscordData: () => ipcRenderer.invoke(channels.discordClearData),
+  onDiscordStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on(channels.discordStatusChanged, listener);
+    return () => ipcRenderer.removeListener(channels.discordStatusChanged, listener);
   },
   onSystemSnapshot: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);
