@@ -77,6 +77,7 @@ describe('application shell', () => {
       ['XREAL device', 'XREAL device centre'],
       ['Display Layout Studio', 'Desktop coordinate space'],
       ['Entertainment', 'Choose what plays in the Hub'],
+      ['WhatsApp', 'WhatsApp Web needs the installed Windows app'],
       ['Notes & study', 'Local notebook'],
       ['Workspaces', 'One-click setups'],
       ['Gestures', 'Gesture studio'],
@@ -260,6 +261,15 @@ describe('application shell', () => {
     await click(buttonContaining('Launch desk', studyAgent));
     expect(open).toHaveBeenCalledWith('https://chatgpt.com', '_blank', 'noopener,noreferrer');
     expect(container.textContent).toContain('Study partner is ready');
+  });
+
+  it('offers WhatsApp as an isolated installed-app workspace', async () => {
+    await renderApp();
+    await click(buttonContaining('WhatsApp'));
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('WhatsApp');
+    expect(container.querySelector('[aria-label="WhatsApp Web workspace"]')).not.toBeNull();
+    expect(container.textContent).toContain('Isolated by design');
+    expect(container.textContent).toContain('installed Windows app');
   });
 
   it('opens global Spotify and YouTube controls beside display status', async () => {

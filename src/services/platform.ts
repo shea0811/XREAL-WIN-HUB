@@ -17,6 +17,15 @@ let browserSimulationEnabled = false;
 let browserLayoutOverride: DisplayLayoutItem[] | null = null;
 let browserPendingLayout: DisplayLayoutItem[] | null = null;
 const browserSnapshotListeners = new Set<(snapshot: SystemSnapshot) => void>();
+const browserWhatsAppListeners = new Set<Parameters<XrealHubBridge['onWhatsAppStatus']>[0]>();
+const browserWhatsAppStatus = {
+  supported: false,
+  state: 'idle' as const,
+  canGoBack: false,
+  canGoForward: false,
+  detached: false,
+  message: 'WhatsApp Web is available in the installed Windows app.',
+};
 
 function browserSnapshot(): SystemSnapshot {
   const screenWidth = Math.max(1280, window.screen.width);
@@ -73,7 +82,7 @@ function browserSnapshot(): SystemSnapshot {
         hardwareControls: false,
       },
     },
-    privacy: { telemetry: false, localStorage: true },
+    privacy: { telemetry: false, localStorage: true, encryptedStorage: false },
   };
 }
 
@@ -215,11 +224,43 @@ const browserBridge: XrealHubBridge = {
   async disconnectSpotify() {
     return this.getSpotifyAuthStatus();
   },
-  async getSpotifyAccessToken() {
-    return null;
-  },
   async playSpotifySource() {
     return false;
+  },
+  async getSpotifyPlaybackStatus() {
+    return { available: false, playing: false, title: 'Spotify', detail: 'Not connected', volume: 50 };
+  },
+  async controlSpotify() {
+    return this.getSpotifyPlaybackStatus();
+  },
+  async clearLocalData() {
+    localStorage.clear();
+    return true;
+  },
+  async getWhatsAppStatus() {
+    return browserWhatsAppStatus;
+  },
+  async setWhatsAppEmbedded() {
+    return browserWhatsAppStatus;
+  },
+  async reloadWhatsApp() {
+    return browserWhatsAppStatus;
+  },
+  async navigateWhatsApp() {
+    return browserWhatsAppStatus;
+  },
+  async detachWhatsApp() {
+    return browserWhatsAppStatus;
+  },
+  async setWhatsAppAlwaysOnTop() {
+    return false;
+  },
+  async clearWhatsAppData() {
+    return browserWhatsAppStatus;
+  },
+  onWhatsAppStatus(callback) {
+    browserWhatsAppListeners.add(callback);
+    return () => browserWhatsAppListeners.delete(callback);
   },
   onSystemSnapshot(callback) {
     browserSnapshotListeners.add(callback);

@@ -1,7 +1,20 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  powerMonitor,
+  safeStorage,
+  screen,
+  session,
+  shell,
+  WebContentsView,
+} = require('electron');
 const { execFile, spawn } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const { promises: fs } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
@@ -16,6 +29,7 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const channels = Object.freeze({
   loadState: 'state:load',
   saveState: 'state:save',
+  clearLocalData: 'state:clear',
   snapshot: 'system:snapshot',
   snapshotChanged: 'system:snapshot-changed',
   openExternal: 'system:open-external',
@@ -34,8 +48,17 @@ const channels = Object.freeze({
   spotifyStatus: 'spotify:status',
   spotifyConnect: 'spotify:connect',
   spotifyDisconnect: 'spotify:disconnect',
-  spotifyToken: 'spotify:token',
   spotifyPlay: 'spotify:play',
+  spotifyPlaybackStatus: 'spotify:playback-status',
+  spotifyControl: 'spotify:control',
+  whatsappStatus: 'whatsapp:status',
+  whatsappStatusChanged: 'whatsapp:status-changed',
+  whatsappEmbedded: 'whatsapp:embedded',
+  whatsappReload: 'whatsapp:reload',
+  whatsappNavigate: 'whatsapp:navigate',
+  whatsappDetach: 'whatsapp:detach',
+  whatsappAlwaysOnTop: 'whatsapp:always-on-top',
+  whatsappClearData: 'whatsapp:clear-data',
 });
 
 const SIMULATED_DISPLAY_ID = 'xreal-one-pro-simulated';
@@ -45,7 +68,336 @@ let mainWindow = null;
 let simulationEnabled = false;
 let simulatedLayoutOverride = null;
 let pendingDisplayTransaction = null;
+let whatsappView = null;
+let whatsappWindow = null;
+let whatsappEmbeddedRequested = false;
+let whatsappBounds = null;
+let whatsappState = 'idle';
 const spotifyAuth = createSpotifyAuth({ app, safeStorage, shell });
+
+const WHATSAPP_URL = 'https://web.whatsapp.com/';
+const WHATSAPP_PARTITION = 'persist:whatsapp';
+const WHATSAPP_PERMISSIONS = new Set(['media', 'notifications', 'clipboard-sanitized-write']);
+const grantedWhatsAppPermissions = new Set(['clipboard-sanitized-write']);
+const DISPLAY_HELPER_SHA256 = '49367428d9ae8f1746450b7d2a550ea88fc4886e4e2f88f44cf56596b3d997aa';
+const IPC_WINDOW_MS = 10_000;
+const IPC_MAX_CALLS = 180;
+const ipcRateWindows = new Map();
+const approvedExternalHosts = new Set([
+  'accounts.spotify.com',
+  'developer.spotify.com',
+  'www.whatsapp.com',
+  'faq.whatsapp.com',
+]);
+
+function isWhatsAppOrigin(value) {
+  try {
+    return new URL(value).origin === 'https://web.whatsapp.com';
+  } catch {
+    return false;
+  }
+}
+
+function isSafeExternalHttps(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
+async function confirmAndOpenExternal(value) {
+  if (!isSafeWebUrl(value)) return false;
+  const parsed = new URL(value);
+  if (!approvedExternalHosts.has(parsed.hostname)) {
+    const options = {
+      type: 'question',
+      title: 'Open external website?',
+      message: `Open ${parsed.hostname} in your default browser?`,
+      detail: 'Check the hostname carefully. This website will run outside XREAL WIN HUB.',
+      buttons: ['Open website', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    };
+    const { response } = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showMessageBox(mainWindow, options)
+      : await dialog.showMessageBox(options);
+    if (response !== 0) return false;
+    approvedExternalHosts.add(parsed.hostname);
+  }
+  await shell.openExternal(parsed.toString());
+  return true;
+}
+
+function isTrustedHubSender(event) {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+}
+
+async function recordSecurityEvent(event, outcome, detail) {
+  try {
+    const destination = path.join(app.getPath('userData'), 'security-events.log');
+    const entry = JSON.stringify({
+      at: new Date().toISOString(),
+      event: String(event).slice(0, 80),
+      outcome: String(outcome).slice(0, 32),
+      detail: detail ? String(detail).slice(0, 160) : undefined,
+    });
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    const stats = await fs.stat(destination).catch(() => null);
+    if (stats && stats.size > 256 * 1024) {
+      await fs.rename(destination, `${destination}.previous`).catch(() => undefined);
+    }
+    await fs.appendFile(destination, `${entry}\n`, { encoding: 'utf8', mode: 0o600 });
+  } catch (error) {
+    console.error('Unable to write security event', error);
+  }
+}
+
+function enforceIpcRate(channel) {
+  const now = Date.now();
+  const recent = (ipcRateWindows.get(channel) ?? []).filter((time) => now - time < IPC_WINDOW_MS);
+  if (recent.length >= IPC_MAX_CALLS) {
+    void recordSecurityEvent(channel, 'blocked', 'rate-limit');
+    throw new Error('Too many requests. Try again shortly.');
+  }
+  recent.push(now);
+  ipcRateWindows.set(channel, recent);
+}
+
+function registerTrustedHandler(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedHubSender(event)) {
+      void recordSecurityEvent(channel, 'blocked', 'untrusted-sender');
+      throw new Error('Untrusted IPC sender.');
+    }
+    enforceIpcRate(channel);
+    return handler(...args);
+  });
+}
+
+function hideWhatsAppForPrivacy(reason = 'privacy-lock') {
+  whatsappEmbeddedRequested = false;
+  removeWhatsAppView();
+  if (whatsappWindow && !whatsappWindow.isDestroyed()) whatsappWindow.hide();
+  void recordSecurityEvent('whatsapp:privacy-hide', 'allowed', reason);
+  publishWhatsAppStatus('WhatsApp was hidden for privacy. Return to its page when you are ready.');
+}
+
+function whatsappStatus(message) {
+  const contents = whatsappWindow && !whatsappWindow.isDestroyed()
+    ? whatsappWindow.webContents
+    : whatsappView?.webContents;
+  return {
+    supported: true,
+    state: whatsappWindow && !whatsappWindow.isDestroyed() ? 'detached' : whatsappState,
+    canGoBack: Boolean(contents?.canGoBack()),
+    canGoForward: Boolean(contents?.canGoForward()),
+    detached: Boolean(whatsappWindow && !whatsappWindow.isDestroyed()),
+    ...(message ? { message } : {}),
+  };
+}
+
+function publishWhatsAppStatus(message) {
+  const status = whatsappStatus(message);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channels.whatsappStatusChanged, status);
+  }
+  return status;
+}
+
+function configureWhatsAppContents(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalHttps(url)) void confirmAndOpenExternal(url);
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (event, url) => {
+    if (isWhatsAppOrigin(url)) return;
+    event.preventDefault();
+    if (isSafeExternalHttps(url)) void confirmAndOpenExternal(url);
+  });
+  contents.on('did-start-loading', () => {
+    whatsappState = 'loading';
+    publishWhatsAppStatus();
+  });
+  contents.on('did-finish-load', () => {
+    whatsappState = 'ready';
+    publishWhatsAppStatus();
+  });
+  contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    whatsappState = 'failed';
+    console.error('WhatsApp Web failed to load', { errorCode, errorDescription, validatedURL });
+    publishWhatsAppStatus('WhatsApp Web could not connect. Check the network and try again.');
+  });
+  contents.on('render-process-gone', (_event, details) => {
+    whatsappState = 'failed';
+    console.error('WhatsApp renderer exited unexpectedly', details);
+    publishWhatsAppStatus('The isolated WhatsApp process stopped unexpectedly. Reload it to continue.');
+  });
+}
+
+function configureWhatsAppSession() {
+  const isolatedSession = session.fromPartition(WHATSAPP_PARTITION, { cache: true });
+  isolatedSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
+    isWhatsAppOrigin(requestingOrigin)
+      && WHATSAPP_PERMISSIONS.has(permission)
+      && grantedWhatsAppPermissions.has(permission),
+  );
+  isolatedSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    if (!isWhatsAppOrigin(details.requestingUrl) || !WHATSAPP_PERMISSIONS.has(permission)) {
+      callback(false);
+      return;
+    }
+    if (grantedWhatsAppPermissions.has(permission)) {
+      callback(true);
+      return;
+    }
+    const mediaTypes = Array.isArray(details.mediaTypes) ? details.mediaTypes.join(' and ') : '';
+    const capability = permission === 'media'
+      ? (mediaTypes || 'camera and microphone')
+      : 'notifications';
+    const promptOptions = {
+      type: 'question',
+      title: 'WhatsApp permission',
+      message: `Allow WhatsApp Web to use ${capability}?`,
+      detail: 'This permission applies only to the isolated WhatsApp session. WhatsApp cannot access XREAL WIN HUB APIs or files.',
+      buttons: ['Allow', 'Block'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    };
+    const prompt = mainWindow && !mainWindow.isDestroyed()
+      ? dialog.showMessageBox(mainWindow, promptOptions)
+      : dialog.showMessageBox(promptOptions);
+    void prompt.then(({ response }) => {
+      const approved = response === 0;
+      if (approved) grantedWhatsAppPermissions.add(permission);
+      callback(approved);
+    }).catch(() => callback(false));
+  });
+  isolatedSession.setDisplayMediaRequestHandler((_request, callback) => callback({}));
+  return isolatedSession;
+}
+
+async function ensureWhatsAppView() {
+  if (whatsappView && !whatsappView.webContents.isDestroyed()) return whatsappView;
+  configureWhatsAppSession();
+  whatsappView = new WebContentsView({
+    webPreferences: {
+      partition: WHATSAPP_PARTITION,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+    },
+  });
+  configureWhatsAppContents(whatsappView.webContents);
+  await whatsappView.webContents.loadURL(WHATSAPP_URL);
+  return whatsappView;
+}
+
+function removeWhatsAppView() {
+  if (!mainWindow || !whatsappView) return;
+  try {
+    mainWindow.contentView.removeChildView(whatsappView);
+  } catch {
+    // The view was already detached from the window.
+  }
+}
+
+function validateWhatsAppBounds(value) {
+  if (!value || typeof value !== 'object') return null;
+  const numbers = ['x', 'y', 'width', 'height'].map((key) => Number(value[key]));
+  if (!numbers.every(Number.isFinite)) return null;
+  const [x, y, width, height] = numbers.map(Math.round);
+  if (x < 0 || y < 0 || width < 320 || height < 360 || width > 10_000 || height > 10_000) return null;
+  const contentBounds = mainWindow?.getContentBounds();
+  if (!contentBounds || x + width > contentBounds.width + 2 || y + height > contentBounds.height + 2) return null;
+  return { x, y, width, height };
+}
+
+async function setWhatsAppEmbedded(visible, bounds) {
+  whatsappEmbeddedRequested = Boolean(visible);
+  if (!visible || (whatsappWindow && !whatsappWindow.isDestroyed())) {
+    removeWhatsAppView();
+    return whatsappStatus();
+  }
+  const validated = validateWhatsAppBounds(bounds);
+  if (!validated) throw new TypeError('Invalid WhatsApp view bounds.');
+  whatsappBounds = validated;
+  const view = await ensureWhatsAppView();
+  if (!mainWindow || mainWindow.isDestroyed()) return whatsappStatus();
+  removeWhatsAppView();
+  mainWindow.contentView.addChildView(view);
+  view.setBounds(validated);
+  return whatsappStatus();
+}
+
+async function detachWhatsApp(alwaysOnTop) {
+  await ensureWhatsAppView();
+  if (whatsappWindow && !whatsappWindow.isDestroyed()) {
+    whatsappWindow.focus();
+    return whatsappStatus();
+  }
+  removeWhatsAppView();
+  whatsappWindow = new BrowserWindow({
+    title: 'WhatsApp — XREAL WIN HUB',
+    width: 480,
+    height: 720,
+    minWidth: 380,
+    minHeight: 520,
+    show: false,
+    autoHideMenuBar: true,
+    alwaysOnTop: Boolean(alwaysOnTop),
+    backgroundColor: '#0b141a',
+    webPreferences: {
+      partition: WHATSAPP_PARTITION,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+    },
+  });
+  configureWhatsAppContents(whatsappWindow.webContents);
+  whatsappWindow.once('ready-to-show', () => whatsappWindow?.show());
+  whatsappWindow.setContentProtection(true);
+  whatsappWindow.on('closed', () => {
+    whatsappWindow = null;
+    publishWhatsAppStatus();
+    if (whatsappEmbeddedRequested && whatsappBounds) {
+      void setWhatsAppEmbedded(true, whatsappBounds).catch((error) =>
+        console.error('Unable to restore embedded WhatsApp view', error),
+      );
+    }
+  });
+  await whatsappWindow.loadURL(WHATSAPP_URL);
+  return publishWhatsAppStatus();
+}
+
+async function clearWhatsAppData() {
+  whatsappEmbeddedRequested = false;
+  removeWhatsAppView();
+  if (whatsappWindow && !whatsappWindow.isDestroyed()) whatsappWindow.destroy();
+  whatsappWindow = null;
+  if (whatsappView && !whatsappView.webContents.isDestroyed()) whatsappView.webContents.close();
+  whatsappView = null;
+  whatsappState = 'idle';
+  grantedWhatsAppPermissions.clear();
+  grantedWhatsAppPermissions.add('clipboard-sanitized-write');
+  const isolatedSession = session.fromPartition(WHATSAPP_PARTITION);
+  await Promise.all([
+    isolatedSession.clearStorageData(),
+    isolatedSession.clearCache(),
+    isolatedSession.clearAuthCache(),
+  ]);
+  await recordSecurityEvent('whatsapp:clear-data', 'allowed');
+  return publishWhatsAppStatus('WhatsApp linked-session data was removed from this PC.');
+}
 
 function statePath() {
   return path.join(app.getPath('userData'), STATE_FILE);
@@ -55,7 +407,9 @@ function isSafeWebUrl(value) {
   if (typeof value !== 'string' || value.length > 2048) return false;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    if (parsed.username || parsed.password) return false;
+    return parsed.protocol === 'https:'
+      || (parsed.protocol === 'http:' && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'));
   } catch {
     return false;
   }
@@ -129,6 +483,7 @@ function getSnapshot() {
     privacy: {
       telemetry: false,
       localStorage: true,
+      encryptedStorage: safeStorage.isEncryptionAvailable(),
     },
   };
 }
@@ -170,10 +525,22 @@ function displayHelperPath() {
   return path.join(__dirname, 'windows-display.ps1');
 }
 
+async function verifyDisplayHelper() {
+  const helperPath = displayHelperPath();
+  const contents = await fs.readFile(helperPath);
+  const digest = createHash('sha256').update(contents).digest('hex');
+  if (digest !== DISPLAY_HELPER_SHA256) {
+    await recordSecurityEvent('display:helper-integrity', 'blocked', digest);
+    throw new Error('The Windows display helper failed its integrity check. Reinstall the Hub.');
+  }
+  return helperPath;
+}
+
 async function runDisplayHelper(action, payloadPath) {
+  const helperPath = await verifyDisplayHelper();
   const args = [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-    '-File', displayHelperPath(), '-Action', action,
+    '-File', helperPath, '-Action', action,
   ];
   if (payloadPath) args.push('-PayloadPath', payloadPath);
   const { stdout } = await execFileAsync('powershell.exe', args, {
@@ -282,9 +649,10 @@ async function previewDisplayLayout(proposed) {
     fs.writeFile(proposedPath, JSON.stringify(proposed), { encoding: 'utf8', mode: 0o600 }),
   ]);
 
+  const helperPath = await verifyDisplayHelper();
   const watcher = spawn('powershell.exe', [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-    '-File', displayHelperPath(), '-Action', 'Watch', '-PayloadPath', originalPath,
+    '-File', helperPath, '-Action', 'Watch', '-PayloadPath', originalPath,
     '-ConfirmToken', confirmToken, '-Seconds', '20',
   ], { detached: true, stdio: 'ignore', windowsHide: true });
   watcher.unref();
@@ -365,6 +733,7 @@ async function identifyDisplays() {
 
 const MEDIA_VIRTUAL_KEYS = Object.freeze({
   previous: 0xB1,
+  toggle: 0xB3,
   next: 0xB0,
   'volume-up': 0xAF,
   'volume-down': 0xAE,
@@ -425,7 +794,15 @@ function moveWindowToDisplay(displayId) {
 async function loadState() {
   try {
     const contents = await fs.readFile(statePath(), 'utf8');
-    return JSON.parse(contents);
+    const saved = JSON.parse(contents);
+    if (saved?.format !== 'safe-storage-v1') return saved;
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error('Windows secure storage is unavailable.');
+    }
+    if (typeof saved.payload !== 'string' || saved.payload.length > MAX_STATE_BYTES * 3) {
+      throw new Error('Encrypted Hub state is invalid.');
+    }
+    return JSON.parse(safeStorage.decryptString(Buffer.from(saved.payload, 'base64')));
   } catch (error) {
     if (error && error.code !== 'ENOENT') {
       console.error('Unable to load local hub state', error);
@@ -439,10 +816,17 @@ async function saveState(state) {
     throw new TypeError('Hub state must be an object.');
   }
 
-  const serialised = JSON.stringify(state, null, 2);
-  if (Buffer.byteLength(serialised, 'utf8') > MAX_STATE_BYTES) {
+  const plainText = JSON.stringify(state);
+  if (Buffer.byteLength(plainText, 'utf8') > MAX_STATE_BYTES) {
     throw new RangeError('Hub state exceeds the 2 MB local limit.');
   }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Windows secure storage is unavailable; Hub data was not written unencrypted.');
+  }
+  const serialised = JSON.stringify({
+    format: 'safe-storage-v1',
+    payload: safeStorage.encryptString(plainText).toString('base64'),
+  });
 
   const destination = statePath();
   const temporary = `${destination}.tmp`;
@@ -452,29 +836,40 @@ async function saveState(state) {
   return true;
 }
 
+async function clearLocalData() {
+  await spotifyAuth.disconnect();
+  await mainWindow?.webContents.session.clearStorageData({ storages: ['localstorage', 'indexdb', 'cachestorage'] });
+  await Promise.all([
+    fs.rm(statePath(), { force: true }),
+    fs.rm(path.join(app.getPath('userData'), 'spotify-auth.json'), { force: true }),
+    fs.rm(path.join(app.getPath('userData'), 'security-events.log'), { force: true }),
+    fs.rm(path.join(app.getPath('userData'), 'security-events.log.previous'), { force: true }),
+  ]);
+  return true;
+}
+
 function registerIpc() {
-  ipcMain.handle(channels.loadState, loadState);
-  ipcMain.handle(channels.saveState, (_event, state) => saveState(state));
-  ipcMain.handle(channels.snapshot, () => getSnapshot());
-  ipcMain.handle(channels.openExternal, async (_event, url) => {
+  registerTrustedHandler(channels.loadState, loadState);
+  registerTrustedHandler(channels.saveState, (state) => saveState(state));
+  registerTrustedHandler(channels.clearLocalData, clearLocalData);
+  registerTrustedHandler(channels.snapshot, () => getSnapshot());
+  registerTrustedHandler(channels.openExternal, async (url) => {
     if (!isSafeWebUrl(url)) return false;
     try {
-      await shell.openExternal(url);
-      return true;
+      return await confirmAndOpenExternal(url);
     } catch (error) {
       console.error('Unable to open external URL', error);
       return false;
     }
   });
-  ipcMain.handle(channels.launchWorkspace, async (_event, profile, displayId) => {
+  registerTrustedHandler(channels.launchWorkspace, async (profile, displayId) => {
     const moved = displayId ? moveWindowToDisplay(displayId) : false;
     const targets = Array.isArray(profile?.targets) ? profile.targets : [];
     let opened = 0;
     for (const target of targets.slice(0, 8)) {
       if (isSafeWebUrl(target?.url)) {
         try {
-          await shell.openExternal(target.url);
-          opened += 1;
+          if (await confirmAndOpenExternal(target.url)) opened += 1;
         } catch (error) {
           console.error('Unable to open workspace target', error);
         }
@@ -482,25 +877,25 @@ function registerIpc() {
     }
     return { opened, moved };
   });
-  ipcMain.handle(channels.moveToDisplay, (_event, displayId) =>
+  registerTrustedHandler(channels.moveToDisplay, (displayId) =>
     moveWindowToDisplay(displayId),
   );
-  ipcMain.handle(channels.theatreMode, (_event, enabled, displayId) => {
+  registerTrustedHandler(channels.theatreMode, (enabled, displayId) => {
     if (!mainWindow) return false;
     if (enabled && displayId) moveWindowToDisplay(displayId);
     mainWindow.setFullScreen(Boolean(enabled));
     return true;
   });
-  ipcMain.handle(channels.alwaysOnTop, (_event, enabled) => {
+  registerTrustedHandler(channels.alwaysOnTop, (enabled) => {
     if (!mainWindow) return false;
     mainWindow.setAlwaysOnTop(Boolean(enabled), 'floating');
     return mainWindow.isAlwaysOnTop();
   });
-  ipcMain.handle(channels.loginItem, (_event, enabled) => {
+  registerTrustedHandler(channels.loginItem, (enabled) => {
     app.setLoginItemSettings({ openAtLogin: Boolean(enabled) });
     return app.getLoginItemSettings().openAtLogin;
   });
-  ipcMain.handle(channels.simulationMode, (_event, enabled) => {
+  registerTrustedHandler(channels.simulationMode, (enabled) => {
     simulationEnabled = Boolean(enabled);
     simulatedLayoutOverride = null;
     pendingDisplayTransaction = null;
@@ -508,19 +903,47 @@ function registerIpc() {
     sendSnapshot();
     return snapshot;
   });
-  ipcMain.handle(channels.displayLayout, getDisplayLayout);
-  ipcMain.handle(channels.displayPreview, (_event, displays) => previewDisplayLayout(displays));
-  ipcMain.handle(channels.displayConfirm, confirmDisplayLayout);
-  ipcMain.handle(channels.displayRevert, revertDisplayLayout);
-  ipcMain.handle(channels.displayIdentify, identifyDisplays);
-  ipcMain.handle(channels.mediaKey, (_event, command) => sendMediaKey(command));
-  ipcMain.handle(channels.spotifyStatus, () => spotifyAuth.getStatus());
-  ipcMain.handle(channels.spotifyConnect, (_event, clientId) => spotifyAuth.connect(clientId));
-  ipcMain.handle(channels.spotifyDisconnect, () => spotifyAuth.disconnect());
-  ipcMain.handle(channels.spotifyToken, () => spotifyAuth.accessToken());
-  ipcMain.handle(channels.spotifyPlay, (_event, source, deviceId) =>
-    spotifyAuth.playSource(source, deviceId),
+  registerTrustedHandler(channels.displayLayout, getDisplayLayout);
+  registerTrustedHandler(channels.displayPreview, (displays) => previewDisplayLayout(displays));
+  registerTrustedHandler(channels.displayConfirm, confirmDisplayLayout);
+  registerTrustedHandler(channels.displayRevert, revertDisplayLayout);
+  registerTrustedHandler(channels.displayIdentify, identifyDisplays);
+  registerTrustedHandler(channels.mediaKey, (command) => sendMediaKey(command));
+  registerTrustedHandler(channels.spotifyStatus, () => spotifyAuth.getStatus());
+  registerTrustedHandler(channels.spotifyConnect, (clientId) => spotifyAuth.connect(clientId));
+  registerTrustedHandler(channels.spotifyDisconnect, () => spotifyAuth.disconnect());
+  registerTrustedHandler(channels.spotifyPlay, (source) => spotifyAuth.playSource(source));
+  registerTrustedHandler(channels.spotifyPlaybackStatus, () => spotifyAuth.playbackStatus());
+  registerTrustedHandler(channels.spotifyControl, (command, value) => spotifyAuth.control(command, value));
+  registerTrustedHandler(channels.whatsappStatus, () => whatsappStatus());
+  registerTrustedHandler(channels.whatsappEmbedded, (visible, bounds) =>
+    setWhatsAppEmbedded(visible, bounds),
   );
+  registerTrustedHandler(channels.whatsappReload, async () => {
+    const contents = whatsappWindow && !whatsappWindow.isDestroyed()
+      ? whatsappWindow.webContents
+      : (await ensureWhatsAppView()).webContents;
+    contents.reload();
+    return whatsappStatus();
+  });
+  registerTrustedHandler(channels.whatsappNavigate, async (direction) => {
+    if (direction !== 'back' && direction !== 'forward') throw new TypeError('Invalid navigation direction.');
+    const contents = whatsappWindow && !whatsappWindow.isDestroyed()
+      ? whatsappWindow.webContents
+      : (await ensureWhatsAppView()).webContents;
+    if (direction === 'back' && contents.canGoBack()) contents.goBack();
+    if (direction === 'forward' && contents.canGoForward()) contents.goForward();
+    return whatsappStatus();
+  });
+  registerTrustedHandler(channels.whatsappDetach, (alwaysOnTop) => {
+    return detachWhatsApp(Boolean(alwaysOnTop));
+  });
+  registerTrustedHandler(channels.whatsappAlwaysOnTop, (enabled) => {
+    if (!whatsappWindow || whatsappWindow.isDestroyed()) return false;
+    whatsappWindow.setAlwaysOnTop(Boolean(enabled), 'floating');
+    return whatsappWindow.isAlwaysOnTop();
+  });
+  registerTrustedHandler(channels.whatsappClearData, clearWhatsAppData);
 }
 
 async function createWindow() {
@@ -538,18 +961,20 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSafeWebUrl(url)) void shell.openExternal(url);
+    if (isSafeWebUrl(url)) void confirmAndOpenExternal(url);
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const current = mainWindow?.webContents.getURL();
     if (url !== current) {
       event.preventDefault();
-      if (isSafeWebUrl(url)) void shell.openExternal(url);
+      if (isSafeWebUrl(url)) void confirmAndOpenExternal(url);
     }
   });
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
@@ -558,6 +983,10 @@ async function createWindow() {
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => {
+    if (whatsappWindow && !whatsappWindow.isDestroyed()) whatsappWindow.destroy();
+    if (whatsappView && !whatsappView.webContents.isDestroyed()) whatsappView.webContents.close();
+    whatsappWindow = null;
+    whatsappView = null;
     mainWindow = null;
   });
 
@@ -570,6 +999,8 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   registerIpc();
+  powerMonitor.on('lock-screen', () => hideWhatsAppForPrivacy('workstation-lock'));
+  globalShortcut.register('CommandOrControl+Alt+Shift+H', () => hideWhatsAppForPrivacy('privacy-shortcut'));
   screen.on('display-added', sendSnapshot);
   screen.on('display-removed', sendSnapshot);
   screen.on('display-metrics-changed', sendSnapshot);
@@ -596,3 +1027,5 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+app.on('will-quit', () => globalShortcut.unregisterAll());

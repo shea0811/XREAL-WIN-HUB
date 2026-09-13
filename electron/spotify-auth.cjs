@@ -266,26 +266,59 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
       const body = await response.text();
       throw new Error(`Spotify playback request failed (${response.status}): ${body.slice(0, 180)}`);
     }
+    if (response.status === 204) return null;
+    const contentType = response.headers.get('content-type') || '';
+    return contentType.includes('application/json') ? response.json() : null;
   }
 
-  async function playSource(source, deviceId) {
+  async function playSource(source) {
     const uri = spotifyUriFromSource(source);
-    if (!uri || typeof deviceId !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId)) return false;
-    await spotifyRequest('/me/player', {
-      method: 'PUT',
-      body: JSON.stringify({ device_ids: [deviceId], play: false }),
-    });
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    if (!uri) return false;
     const type = uri.split(':')[1];
     const body = ['track', 'episode'].includes(type) ? { uris: [uri] } : { context_uri: uri };
-    await spotifyRequest(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
+    await spotifyRequest('/me/player/play', {
       method: 'PUT',
       body: JSON.stringify(body),
     });
     return true;
   }
 
-  return { getStatus, connect, disconnect, accessToken, playSource };
+  async function playbackStatus(message) {
+    const state = await spotifyRequest('/me/player');
+    const item = state?.item;
+    return {
+      available: Boolean(state?.device),
+      playing: Boolean(state?.is_playing),
+      title: typeof item?.name === 'string' ? item.name : 'Spotify',
+      detail: Array.isArray(item?.artists)
+        ? item.artists.map((artist) => artist?.name).filter(Boolean).join(', ')
+        : (state?.device?.name || 'No active Spotify device'),
+      volume: Number.isFinite(state?.device?.volume_percent) ? state.device.volume_percent : 50,
+      artwork: item?.album?.images?.[0]?.url,
+      ...(message ? { message } : {}),
+    };
+  }
+
+  async function control(command, value) {
+    if (!['previous', 'toggle', 'next', 'volume'].includes(command)) {
+      throw new TypeError('Unsupported Spotify command.');
+    }
+    const current = await playbackStatus();
+    if (!current.available) return { ...current, message: 'Open Spotify on a device once, then try the control again.' };
+    if (command === 'previous' || command === 'next') {
+      await spotifyRequest(`/me/player/${command}`, { method: 'POST' });
+    } else if (command === 'toggle') {
+      await spotifyRequest(`/me/player/${current.playing ? 'pause' : 'play'}`, { method: 'PUT' });
+    } else {
+      const volume = Math.max(0, Math.min(100, Math.round(Number(value))));
+      if (!Number.isFinite(volume)) throw new TypeError('Spotify volume must be a number.');
+      await spotifyRequest(`/me/player/volume?volume_percent=${volume}`, { method: 'PUT' });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    return playbackStatus();
+  }
+
+  return { getStatus, connect, disconnect, accessToken, playSource, playbackStatus, control };
 }
 
 module.exports = { createSpotifyAuth, spotifyUriFromSource, REDIRECT_REGISTRATION };

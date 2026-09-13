@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const channels = Object.freeze({
   loadState: 'state:load',
   saveState: 'state:save',
+  clearLocalData: 'state:clear',
   snapshot: 'system:snapshot',
   snapshotChanged: 'system:snapshot-changed',
   openExternal: 'system:open-external',
@@ -23,13 +24,23 @@ const channels = Object.freeze({
   spotifyStatus: 'spotify:status',
   spotifyConnect: 'spotify:connect',
   spotifyDisconnect: 'spotify:disconnect',
-  spotifyToken: 'spotify:token',
   spotifyPlay: 'spotify:play',
+  spotifyPlaybackStatus: 'spotify:playback-status',
+  spotifyControl: 'spotify:control',
+  whatsappStatus: 'whatsapp:status',
+  whatsappStatusChanged: 'whatsapp:status-changed',
+  whatsappEmbedded: 'whatsapp:embedded',
+  whatsappReload: 'whatsapp:reload',
+  whatsappNavigate: 'whatsapp:navigate',
+  whatsappDetach: 'whatsapp:detach',
+  whatsappAlwaysOnTop: 'whatsapp:always-on-top',
+  whatsappClearData: 'whatsapp:clear-data',
 });
 
 contextBridge.exposeInMainWorld('xrealHub', {
   loadState: () => ipcRenderer.invoke(channels.loadState),
   saveState: (state) => ipcRenderer.invoke(channels.saveState, state),
+  clearLocalData: () => ipcRenderer.invoke(channels.clearLocalData),
   getSystemSnapshot: () => ipcRenderer.invoke(channels.snapshot),
   openExternal: (url) => ipcRenderer.invoke(channels.openExternal, url),
   launchWorkspace: (profile, displayId) =>
@@ -49,8 +60,22 @@ contextBridge.exposeInMainWorld('xrealHub', {
   getSpotifyAuthStatus: () => ipcRenderer.invoke(channels.spotifyStatus),
   connectSpotify: (clientId) => ipcRenderer.invoke(channels.spotifyConnect, clientId),
   disconnectSpotify: () => ipcRenderer.invoke(channels.spotifyDisconnect),
-  getSpotifyAccessToken: () => ipcRenderer.invoke(channels.spotifyToken),
-  playSpotifySource: (source, deviceId) => ipcRenderer.invoke(channels.spotifyPlay, source, deviceId),
+  playSpotifySource: (source) => ipcRenderer.invoke(channels.spotifyPlay, source),
+  getSpotifyPlaybackStatus: () => ipcRenderer.invoke(channels.spotifyPlaybackStatus),
+  controlSpotify: (command, value) => ipcRenderer.invoke(channels.spotifyControl, command, value),
+  getWhatsAppStatus: () => ipcRenderer.invoke(channels.whatsappStatus),
+  setWhatsAppEmbedded: (visible, bounds) =>
+    ipcRenderer.invoke(channels.whatsappEmbedded, visible, bounds),
+  reloadWhatsApp: () => ipcRenderer.invoke(channels.whatsappReload),
+  navigateWhatsApp: (direction) => ipcRenderer.invoke(channels.whatsappNavigate, direction),
+  detachWhatsApp: (alwaysOnTop) => ipcRenderer.invoke(channels.whatsappDetach, alwaysOnTop),
+  setWhatsAppAlwaysOnTop: (enabled) => ipcRenderer.invoke(channels.whatsappAlwaysOnTop, enabled),
+  clearWhatsAppData: () => ipcRenderer.invoke(channels.whatsappClearData),
+  onWhatsAppStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on(channels.whatsappStatusChanged, listener);
+    return () => ipcRenderer.removeListener(channels.whatsappStatusChanged, listener);
+  },
   onSystemSnapshot: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on(channels.snapshotChanged, listener);

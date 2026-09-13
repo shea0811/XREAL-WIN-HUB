@@ -17,6 +17,7 @@ import { Gestures } from './modules/Gestures';
 import { MediaServicePage } from './modules/MediaServicePage';
 import { Notes } from './modules/Notes';
 import { Workspaces } from './modules/Workspaces';
+import { WhatsApp } from './modules/WhatsApp';
 import { Agents } from './modules/Agents';
 import { Settings } from './modules/Settings';
 import { platform } from './services/platform';
@@ -298,6 +299,13 @@ function AppShell() {
       case 'spotify':
       case 'youtube':
         return null;
+      case 'whatsapp':
+        return (
+          <WhatsApp
+            onToast={showToast}
+            obscured={paletteOpen || notificationCenterOpen}
+          />
+        );
       case 'notes':
         return <Notes onToast={showToast} />;
       case 'workspaces':
@@ -336,6 +344,7 @@ function AppShell() {
               snapshot={snapshot}
               onToast={showToast}
               onOpenMedia={(service) => navigate(service)}
+              onOpenWhatsApp={() => navigate('whatsapp')}
             />
           </div>
           <div hidden={activeSection !== 'spotify'}>

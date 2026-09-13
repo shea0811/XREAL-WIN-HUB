@@ -5,6 +5,7 @@ export type HubSection =
   | 'entertainment'
   | 'spotify'
   | 'youtube'
+  | 'whatsapp'
   | 'notes'
   | 'workspaces'
   | 'gestures'
@@ -187,6 +188,7 @@ export interface SystemSnapshot {
   privacy: {
     telemetry: boolean;
     localStorage: boolean;
+    encryptedStorage?: boolean;
   };
 }
 
@@ -204,6 +206,32 @@ export interface SpotifyAuthStatus {
   product: string | null;
   redirectUri: string;
   message?: string;
+}
+
+export interface SpotifyPlaybackStatus {
+  available: boolean;
+  playing: boolean;
+  title: string;
+  detail: string;
+  volume: number;
+  artwork?: string;
+  message?: string;
+}
+
+export interface WhatsAppStatus {
+  supported: boolean;
+  state: 'idle' | 'loading' | 'ready' | 'failed' | 'detached';
+  canGoBack: boolean;
+  canGoForward: boolean;
+  detached: boolean;
+  message?: string;
+}
+
+export interface EmbeddedViewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface XrealHubBridge {
@@ -225,12 +253,22 @@ export interface XrealHubBridge {
   confirmDisplayLayout(): Promise<boolean>;
   revertDisplayLayout(): Promise<DisplayLayoutSnapshot>;
   identifyDisplays(): Promise<boolean>;
-  sendMediaKey(command: 'previous' | 'next' | 'volume-up' | 'volume-down'): Promise<boolean>;
+  sendMediaKey(command: 'previous' | 'toggle' | 'next' | 'volume-up' | 'volume-down'): Promise<boolean>;
   getSpotifyAuthStatus(): Promise<SpotifyAuthStatus>;
   connectSpotify(clientId: string): Promise<SpotifyAuthStatus>;
   disconnectSpotify(): Promise<SpotifyAuthStatus>;
-  getSpotifyAccessToken(): Promise<string | null>;
-  playSpotifySource(source: string, deviceId: string): Promise<boolean>;
+  playSpotifySource(source: string): Promise<boolean>;
+  getSpotifyPlaybackStatus(): Promise<SpotifyPlaybackStatus>;
+  controlSpotify(command: 'previous' | 'toggle' | 'next' | 'volume', value?: number): Promise<SpotifyPlaybackStatus>;
+  clearLocalData(): Promise<boolean>;
+  getWhatsAppStatus(): Promise<WhatsAppStatus>;
+  setWhatsAppEmbedded(visible: boolean, bounds?: EmbeddedViewBounds): Promise<WhatsAppStatus>;
+  reloadWhatsApp(): Promise<WhatsAppStatus>;
+  navigateWhatsApp(direction: 'back' | 'forward'): Promise<WhatsAppStatus>;
+  detachWhatsApp(alwaysOnTop: boolean): Promise<WhatsAppStatus>;
+  setWhatsAppAlwaysOnTop(enabled: boolean): Promise<boolean>;
+  clearWhatsAppData(): Promise<WhatsAppStatus>;
+  onWhatsAppStatus(callback: (status: WhatsAppStatus) => void): () => void;
   onSystemSnapshot(callback: (snapshot: SystemSnapshot) => void): () => void;
 }
 

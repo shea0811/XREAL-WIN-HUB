@@ -5,6 +5,7 @@ import {
   Maximize2,
   MonitorPlay,
   Music2,
+  MessageCircle,
   Radio,
   Sparkles,
   Tv,
@@ -28,10 +29,12 @@ export function Entertainment({
   snapshot,
   onToast,
   onOpenMedia,
+  onOpenWhatsApp,
 }: {
   snapshot: SystemSnapshot | null;
   onToast(message: string, detail?: string): void;
   onOpenMedia(service: MediaService): void;
+  onOpenWhatsApp(): void;
 }) {
   const { state, recordActivity } = useHub();
   const { enableService } = useMedia();
@@ -133,6 +136,15 @@ export function Entertainment({
               <span className="service-card__in-app">In Hub</span>
             </button>
           ))}
+          <button
+            className="service-card service-card--integrated"
+            onClick={onOpenWhatsApp}
+            style={{ '--service-color': '#43d989' } as CSSProperties}
+          >
+            <span className="service-card__brand"><MessageCircle width={28} height={28} /></span>
+            <span className="service-card__copy"><strong>WhatsApp</strong><small>Open secure linked-device workspace</small></span>
+            <span className="service-card__in-app">In Hub</span>
+          </button>
           {EXTERNAL_SERVICES.map((service) => (
             <button
               className="service-card"

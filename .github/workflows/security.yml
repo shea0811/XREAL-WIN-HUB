@@ -1,0 +1,33 @@
+name: Security and build checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run check
+      - run: npm run package:dir
+      - name: Create dependency SBOM
+        shell: pwsh
+        run: npm sbom --sbom-format cyclonedx | Out-File -Encoding utf8 xreal-win-hub-sbom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xreal-win-hub-security-artifacts
+          path: |
+            xreal-win-hub-sbom.json
+            release/win-unpacked
+          retention-days: 14

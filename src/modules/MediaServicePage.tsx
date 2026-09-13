@@ -101,8 +101,10 @@ export function MediaServicePage({
               <span className="eyebrow">Spotify Premium</span>
               <h2>Connect direct playback</h2>
               <p>
-                Create a Spotify Developer app, add <code>{authStatus?.redirectUri ?? 'http://127.0.0.1/callback'}</code>
-                {' '}as its redirect URI, then paste its Client ID below. Sign-in opens Spotify’s own authorization page.
+                In your Spotify Developer app, register exactly{' '}
+                <code>{authStatus?.redirectUri ?? 'http://127.0.0.1/callback'}</code> — including the
+                {' '}<code>/callback</code> path and with no port. The Hub adds its temporary loopback port
+                during sign-in, as Spotify permits for an explicit loopback IP address.
               </p>
             </div>
           </div>

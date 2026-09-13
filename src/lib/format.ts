@@ -23,7 +23,9 @@ export function formatDuration(totalSeconds: number) {
 export function validWebUrl(value: string) {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    if (parsed.username || parsed.password) return false;
+    return parsed.protocol === 'https:'
+      || (parsed.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(parsed.hostname));
   } catch {
     return false;
   }

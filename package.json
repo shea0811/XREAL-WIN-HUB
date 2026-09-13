@@ -48,6 +48,14 @@
     "asarUnpack": [
       "electron/windows-display.ps1"
     ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
     "directories": {
       "output": "release"
     },
@@ -58,6 +66,8 @@
     ],
     "win": {
       "icon": "build/icon.ico",
+      "signAndEditExecutable": true,
+      "verifyUpdateCodeSignature": true,
       "target": [
         {
           "target": "nsis",

@@ -16,6 +16,8 @@ describe('format helpers', () => {
   it('accepts only HTTP and HTTPS destinations', () => {
     expect(validWebUrl('https://example.com')).toBe(true);
     expect(validWebUrl('http://localhost:3000')).toBe(true);
+    expect(validWebUrl('http://example.com')).toBe(false);
+    expect(validWebUrl('https://user:password@example.com')).toBe(false);
     expect(validWebUrl('javascript:alert(1)')).toBe(false);
     expect(validWebUrl('not a URL')).toBe(false);
   });

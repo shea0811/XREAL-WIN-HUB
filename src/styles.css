@@ -390,6 +390,21 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 7px; col
 .service-card > svg { color: var(--muted); }
 .service-card__in-app { padding: 4px 7px; color: var(--service-color); font-size: .57rem; font-weight: 800; background: color-mix(in srgb,var(--service-color) 9%,transparent); border: 1px solid color-mix(in srgb,var(--service-color) 19%,transparent); border-radius: 999px; }
 .service-card--integrated { background: color-mix(in srgb,var(--service-color) 3%,var(--panel)); }
+.whatsapp-shell { overflow: hidden; }
+.whatsapp-toolbar { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 13px; border-bottom: 1px solid var(--border); }
+.whatsapp-toolbar__nav, .whatsapp-toolbar__actions { display: flex; align-items: center; gap: 8px; }
+.whatsapp-toolbar__nav .button { min-width: 38px; padding-inline: 10px; }
+.whatsapp-on-top { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: .63rem; }
+.whatsapp-on-top input { accent-color: var(--teal); }
+.whatsapp-stage { position: relative; min-height: min(650px,calc(100vh - 285px)); overflow: hidden; background: #0b141a; }
+.whatsapp-loading, .whatsapp-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 11px; padding: 28px; color: #53bdeb; text-align: center; }
+.whatsapp-loading span { color: rgba(255,255,255,.62); font-size: .72rem; }
+.whatsapp-empty { color: var(--teal); background: radial-gradient(circle at center,rgba(67,217,137,.08),transparent 42%),#0b141a; }
+.whatsapp-empty h2 { margin: 3px 0 0; color: #e9edef; font-size: 1rem; }
+.whatsapp-empty p { max-width: 540px; margin: 0 0 7px; color: #8696a0; font-size: .69rem; line-height: 1.55; }
+.whatsapp-empty--private { background: repeating-linear-gradient(135deg,#0b141a,#0b141a 10px,#0d181f 10px,#0d181f 20px); }
+.whatsapp-privacy-note { margin-top: 13px; }
+.privacy-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 13px; }
 .media-tool-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
 .setting-card, .setting-row { display: flex; align-items: center; min-height: 73px; gap: 13px; padding: 13px 15px; background: var(--panel); border: 1px solid var(--border); border-radius: 13px; }
 .setting-card__icon, .setting-row__icon { display: grid; flex: 0 0 auto; width: 36px; height: 36px; place-items: center; color: var(--teal); background: var(--teal-soft); border-radius: 9px; }

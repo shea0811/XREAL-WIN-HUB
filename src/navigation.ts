@@ -8,6 +8,7 @@ import {
   PanelsTopLeft,
   MonitorCog,
   Music2,
+  MessageCircle,
   Settings,
   Video,
   type LucideIcon,
@@ -50,6 +51,13 @@ export const NAVIGATION: NavigationItem[] = [
     shortLabel: 'Media',
     description: 'Theatre mode and streaming launchers',
     icon: Clapperboard,
+  },
+  {
+    id: 'whatsapp',
+    label: 'WhatsApp',
+    shortLabel: 'WhatsApp',
+    description: 'Secure linked-device workspace',
+    icon: MessageCircle,
   },
   {
     id: 'notes',

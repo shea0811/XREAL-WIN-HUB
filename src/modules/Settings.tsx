@@ -17,8 +17,10 @@ import {
   ShieldCheck,
   Sun,
   Sparkles,
+  MessageCircle,
+  Trash2,
 } from 'lucide-react';
-import { SectionHeading, StatusPill, Toggle } from '../components/ui';
+import { Button, SectionHeading, StatusPill, Toggle } from '../components/ui';
 import { platform } from '../services/platform';
 import { useHub } from '../state/HubContext';
 import type { SystemSnapshot, ThemeMode } from '../types';
@@ -70,6 +72,20 @@ export function Settings({
         detail: display.label,
       });
     }
+  }
+
+  async function clearWhatsApp() {
+    if (!window.confirm('Sign out of WhatsApp in the Hub and remove its local cookies and linked-session data?')) return;
+    await platform.clearWhatsAppData();
+    onToast('WhatsApp data cleared', 'Scan the QR code again when you next open WhatsApp.');
+  }
+
+  async function clearAllData() {
+    if (!window.confirm('Delete local notes, settings, activity, Spotify authorization and diagnostics from this PC?')) return;
+    await platform.clearWhatsAppData();
+    await platform.clearLocalData();
+    localStorage.clear();
+    window.location.reload();
   }
 
   return (
@@ -176,7 +192,11 @@ export function Settings({
             <div><Database size={19} /><span><strong>App data</strong><small>Local JSON file</small></span></div>
             <div><HardDrive size={19} /><span><strong>Notes</strong><small>On this device</small></span></div>
             <div><ShieldCheck size={19} /><span><strong>Telemetry</strong><small>Off</small></span></div>
-            <div><Eye size={19} /><span><strong>Camera</strong><small>Not requested</small></span></div>
+            <div><Eye size={19} /><span><strong>Camera</strong><small>WhatsApp approval only</small></span></div>
+          </div>
+          <div className="privacy-actions">
+            <Button onClick={() => void clearWhatsApp()}><MessageCircle size={16} /> Clear WhatsApp session</Button>
+            <Button variant="danger" onClick={() => void clearAllData()}><Trash2 size={16} /> Delete all local data</Button>
           </div>
           <div className="diagnostics-block">
             <div><strong>Build diagnostics</strong><StatusPill tone="neutral">v{snapshot?.appVersion ?? '0.1.0'}</StatusPill></div>
