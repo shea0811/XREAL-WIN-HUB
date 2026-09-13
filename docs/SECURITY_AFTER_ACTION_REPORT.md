@@ -27,9 +27,9 @@ The app moved from **moderate residual risk / personal beta** to **lower-moderat
 
 The registered redirect URI shown to the user is now explicitly:
 
-`http://127.0.0.1/callback`
+`http://127.0.0.1:8888/callback`
 
-This is intentionally registered **without a port**. The Hub binds an available local port on `127.0.0.1` and adds that port only to the authorization and token requests, for example `http://127.0.0.1:49152/callback`. Spotify expressly permits dynamic ports for loopback IP literals. `localhost` is not used. The UI now explains the configuration precisely, and a regression test protects the registration/runtime distinction.
+The Hub binds only to the explicit IPv4 loopback interface on fixed port `8888`. Using the same exact URI for dashboard registration, authorization, and token exchange avoids the dashboard validator's rejection of a portless HTTP URI. `localhost` is not used. If another process owns the port, sign-in stops with a clear error instead of falling back to a different redirect.
 
 Reference: https://developer.spotify.com/documentation/web-api/concepts/redirect_uri
 

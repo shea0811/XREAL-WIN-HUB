@@ -13,13 +13,13 @@ const {
 
 describe('Spotify desktop authorization helpers', () => {
   it('uses the registered loopback redirect required by the desktop PKCE flow', () => {
-    expect(REDIRECT_REGISTRATION).toBe('http://127.0.0.1/callback');
+    expect(REDIRECT_REGISTRATION).toBe('http://127.0.0.1:8888/callback');
   });
 
-  it('uses an explicit loopback IP and adds only the dynamically assigned port at runtime', async () => {
+  it('uses the same explicit loopback URI for registration and runtime', async () => {
     const source = await readFile(new URL('../electron/spotify-auth.cjs', import.meta.url), 'utf8');
-    expect(source).toContain("server.listen(0, '127.0.0.1'");
-    expect(source).toContain('`http://127.0.0.1:${address.port}/callback`');
+    expect(source).toContain("server.listen(SPOTIFY_CALLBACK_PORT, '127.0.0.1'");
+    expect(source).toContain('redirect_uri: REDIRECT_REGISTRATION');
     expect(source).not.toContain('http://localhost');
   });
 

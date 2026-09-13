@@ -5,7 +5,8 @@ const { promises: fs } = require('node:fs');
 const { createServer } = require('node:http');
 const path = require('node:path');
 
-const REDIRECT_REGISTRATION = 'http://127.0.0.1/callback';
+const SPOTIFY_CALLBACK_PORT = 8888;
+const REDIRECT_REGISTRATION = `http://127.0.0.1:${SPOTIFY_CALLBACK_PORT}/callback`;
 const SPOTIFY_SCOPES = [
   'streaming',
   'user-read-email',
@@ -189,14 +190,11 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
           if (authorizationError) throw new Error(`Spotify authorization was declined: ${authorizationError}.`);
           const code = requestUrl.searchParams.get('code');
           if (!code) throw new Error('Spotify did not return an authorization code.');
-          const address = server.address();
-          if (!address || typeof address === 'string') throw new Error('Spotify callback address was unavailable.');
-          const redirectUri = `http://127.0.0.1:${address.port}/callback`;
           const token = await exchangeToken({
             client_id: cleanedClientId,
             grant_type: 'authorization_code',
             code,
-            redirect_uri: redirectUri,
+            redirect_uri: REDIRECT_REGISTRATION,
             code_verifier: verifier,
           });
           record = {
@@ -222,18 +220,20 @@ function createSpotifyAuth({ app, safeStorage, shell }) {
         }
       });
 
-      server.on('error', (error) => finish(reject, error));
-      server.listen(0, '127.0.0.1', async () => {
+      server.on('error', (error) => {
+        const message = error?.code === 'EADDRINUSE'
+          ? `Spotify sign-in port ${SPOTIFY_CALLBACK_PORT} is already in use. Close any other Hub instance and try again.`
+          : error;
+        finish(reject, message instanceof Error ? message : new Error(String(message)));
+      });
+      server.listen(SPOTIFY_CALLBACK_PORT, '127.0.0.1', async () => {
         try {
-          const address = server.address();
-          if (!address || typeof address === 'string') throw new Error('Spotify callback address was unavailable.');
-          const redirectUri = `http://127.0.0.1:${address.port}/callback`;
           const authorizeUrl = new URL('https://accounts.spotify.com/authorize');
           authorizeUrl.search = new URLSearchParams({
             response_type: 'code',
             client_id: cleanedClientId,
             scope: SPOTIFY_SCOPES,
-            redirect_uri: redirectUri,
+            redirect_uri: REDIRECT_REGISTRATION,
             state: expectedState,
             code_challenge_method: 'S256',
             code_challenge: challenge,

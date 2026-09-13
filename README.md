@@ -61,7 +61,7 @@ Simulation is clearly labelled and never enables native hand-tracking or spatial
 ### Connect Spotify Premium
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Add `http://127.0.0.1/callback` to its redirect URIs exactly as shown.
+2. Add `http://127.0.0.1:8888/callback` to its redirect URIs exactly as shown.
 3. In the installed Windows Hub, open **Entertainment → Spotify**, paste the app's Client ID, and choose **Connect Spotify**.
 4. Complete Spotify's browser sign-in. The Hub requests playback-only scopes and stores the resulting token encrypted with Windows secure storage.
 
