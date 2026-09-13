@@ -2,8 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('Windows display helper structure', () => {
-  it('uses the documented 220-byte Unicode DEVMODE display layout', async () => {
-    const source = await readFile(new URL('./windows-display.ps1', import.meta.url), 'utf8');
+  it.each(['LF', 'CRLF'])('uses the documented 220-byte Unicode DEVMODE display layout with %s endings', async (ending) => {
+    const original = await readFile(new URL('./windows-display.ps1', import.meta.url), 'utf8');
+    const lf = original.replace(/\r\n/g, '\n');
+    const fixture = ending === 'CRLF' ? lf.replace(/\n/g, '\r\n') : lf;
+    const source = fixture.replace(/\r\n/g, '\n');
     expect(source).toContain('LayoutKind.Explicit, CharSet = CharSet.Unicode, Size = 220');
     expect(source).toContain('[FieldOffset(76)]\n        public int dmPositionX;');
     expect(source).toContain('[FieldOffset(80)]\n        public int dmPositionY;');
